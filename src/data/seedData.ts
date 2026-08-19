@@ -1,0 +1,848 @@
+import {
+  Customer,
+  Product,
+  Order,
+  Payment,
+  Expense,
+  Dispatch,
+  RawMaterial,
+  RawMaterialUsage,
+  FinishedGoodsLog,
+  DocumentItem,
+  Settings
+} from '../types';
+
+export const initialCustomers: Customer[] = [
+  {
+    id: 'CUS-1001',
+    name: 'Dr. Rajesh Patel',
+    phone: '+91 98250 12345',
+    company: 'MediCare Labs',
+    address: 'Plot 42, GIDC Industrial Estate, Vadodara, Gujarat 390010',
+    customerType: 'Manufacturer',
+    priceCategory: 'A',
+    status: 'active',
+    createdAt: '2026-01-15',
+    totalOrders: 14,
+    totalSpent: 425000
+  },
+  {
+    id: 'CUS-1002',
+    name: 'Suresh Patel',
+    phone: '+91 98980 67890',
+    company: 'Patel Distributors',
+    address: 'Shop 12, Commercial Hub, Surat, Gujarat 395003',
+    customerType: 'Distributor',
+    priceCategory: 'B',
+    status: 'active',
+    createdAt: '2026-02-01',
+    totalOrders: 18,
+    totalSpent: 680000
+  },
+  {
+    id: 'CUS-1003',
+    name: 'Anil Agarwal',
+    phone: '+91 97129 45678',
+    company: 'ABC Pharma Pvt Ltd',
+    address: 'Pharma Park Zone 3, Ahmedabad, Gujarat 382445',
+    customerType: 'Manufacturer',
+    priceCategory: 'C',
+    status: 'active',
+    createdAt: '2026-02-10',
+    totalOrders: 9,
+    totalSpent: 310000
+  },
+  {
+    id: 'CUS-1004',
+    name: 'Vramod Shah',
+    phone: '+91 94260 11223',
+    company: 'Prime Chemicals',
+    address: 'Sector 5, Ankleshwar Industrial Area, Gujarat 393002',
+    customerType: 'Wholesaler',
+    priceCategory: 'A',
+    status: 'active',
+    createdAt: '2026-03-04',
+    totalOrders: 6,
+    totalSpent: 195000
+  },
+  {
+    id: 'CUS-1005',
+    name: 'Manish Sharma',
+    phone: '+91 99044 33445',
+    company: 'Zenith Lifesciences',
+    address: 'B-201 Synergy Tower, S.G. Highway, Ahmedabad, Gujarat 380054',
+    customerType: 'Manufacturer',
+    priceCategory: 'B',
+    status: 'active',
+    createdAt: '2026-03-20',
+    totalOrders: 11,
+    totalSpent: 510000
+  },
+  {
+    id: 'CUS-1006',
+    name: 'Ramesh Gupta',
+    phone: '+91 98240 55667',
+    company: 'Gupta Traders',
+    address: 'Grain Market Yard, Rajkot, Gujarat 360001',
+    customerType: 'Distributor',
+    priceCategory: 'B',
+    status: 'active',
+    createdAt: '2026-04-12',
+    totalOrders: 5,
+    totalSpent: 140000
+  },
+  {
+    id: 'CUS-1007',
+    name: 'Kiran Desai',
+    phone: '+91 98790 88990',
+    company: 'Sunrise Healthcare',
+    address: 'Healthcare Plaza, Vapi GIDC, Gujarat 396195',
+    customerType: 'Manufacturer',
+    priceCategory: 'A',
+    status: 'active',
+    createdAt: '2026-05-02',
+    totalOrders: 8,
+    totalSpent: 290000
+  },
+  {
+    id: 'CUS-1008',
+    name: 'Vikram Verma',
+    phone: '+91 96012 33445',
+    company: 'Verma Chem Solutions',
+    address: 'Phase 2 Industrial Zone, Bharuch, Gujarat 392001',
+    customerType: 'Wholesaler',
+    priceCategory: 'C',
+    status: 'active',
+    createdAt: '2026-05-18',
+    totalOrders: 4,
+    totalSpent: 115000
+  },
+  {
+    id: 'CUS-1009',
+    name: 'Dinesh Joshi',
+    phone: '+91 98981 77665',
+    company: 'Shree Industries',
+    address: 'Aji Vasahat, Rajkot, Gujarat 360003',
+    customerType: 'Manufacturer',
+    priceCategory: 'A',
+    status: 'active',
+    createdAt: '2026-06-01',
+    totalOrders: 7,
+    totalSpent: 260000
+  },
+  {
+    id: 'CUS-1010',
+    name: 'Sneha Kapadia',
+    phone: '+91 99789 22334',
+    company: 'Blue Ocean Cosmetics',
+    address: 'GIDC Chhatral, Gandhinagar, Gujarat 382729',
+    customerType: 'Manufacturer',
+    priceCategory: 'C',
+    status: 'active',
+    createdAt: '2026-06-15',
+    totalOrders: 12,
+    totalSpent: 590000
+  }
+];
+
+export const initialProducts: Product[] = [
+  {
+    id: 'PRD-101',
+    name: '100ml Bottle',
+    sku: 'BTL-100',
+    type: 'bottle',
+    sizeOrType: '100 ml',
+    description: '100ml PET Narrow Mouth Round Bottle',
+    priceA: 3.50,
+    priceB: 3.10,
+    priceC: 2.80,
+    currentStock: 18500,
+    minimumStock: 5000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-102',
+    name: '200ml Bottle',
+    sku: 'BTL-200',
+    type: 'bottle',
+    sizeOrType: '200 ml',
+    description: '200ml Clear PET Round Bottle',
+    priceA: 4.80,
+    priceB: 4.30,
+    priceC: 3.90,
+    currentStock: 22000,
+    minimumStock: 6000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-103',
+    name: '250ml Bottle',
+    sku: 'BTL-250',
+    type: 'bottle',
+    sizeOrType: '250 ml',
+    description: '250ml PET Pharma Round Bottle',
+    priceA: 5.50,
+    priceB: 4.90,
+    priceC: 4.50,
+    currentStock: 14200,
+    minimumStock: 4000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-104',
+    name: '500ml Bottle',
+    sku: 'BTL-500',
+    type: 'bottle',
+    sizeOrType: '500 ml',
+    description: '500ml Amber PET Heavy Duty Bottle',
+    priceA: 8.50,
+    priceB: 7.80,
+    priceC: 7.20,
+    currentStock: 1250,
+    minimumStock: 3000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-105',
+    name: '1L Bottle',
+    sku: 'BTL-1000',
+    type: 'bottle',
+    sizeOrType: '1000 ml',
+    description: '1 Litre Clear Cylindrical PET Bottle',
+    priceA: 14.00,
+    priceB: 12.80,
+    priceC: 11.80,
+    currentStock: 9800,
+    minimumStock: 2500,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-106',
+    name: '2L Bottle',
+    sku: 'BTL-2000',
+    type: 'bottle',
+    sizeOrType: '2000 ml',
+    description: '2 Litre HDPE Chemical Can Bottle',
+    priceA: 26.00,
+    priceB: 23.50,
+    priceC: 21.50,
+    currentStock: 4500,
+    minimumStock: 1500,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-107',
+    name: '5L Bottle',
+    sku: 'BTL-5000',
+    type: 'bottle',
+    sizeOrType: '5000 ml',
+    description: '5 Litre Heavy Duty Container Bottle',
+    priceA: 55.00,
+    priceB: 49.00,
+    priceC: 45.00,
+    currentStock: 860,
+    minimumStock: 1000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-108',
+    name: 'Custom PET Bottle',
+    sku: 'BTL-CUST',
+    type: 'bottle',
+    sizeOrType: 'Custom Spec',
+    description: 'Custom Molded Cosmetic / Sanitizer Bottle',
+    priceA: 18.00,
+    priceB: 16.50,
+    priceC: 15.00,
+    currentStock: 7400,
+    minimumStock: 2000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-201',
+    name: '28mm Standard Cap',
+    sku: 'CAP-28S',
+    type: 'cap',
+    sizeOrType: '28 mm standard',
+    description: '28mm ROPP Thread Screw Cap',
+    priceA: 1.50,
+    priceB: 1.30,
+    priceC: 1.10,
+    currentStock: 42500,
+    minimumStock: 10000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-202',
+    name: '28mm Flip Cap',
+    sku: 'CAP-28F',
+    type: 'cap',
+    sizeOrType: '28 mm flip top',
+    description: '28mm Polypropylene Flip Top Dispenser Cap',
+    priceA: 2.20,
+    priceB: 1.90,
+    priceC: 1.75,
+    currentStock: 31000,
+    minimumStock: 8000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-203',
+    name: '38mm Cap',
+    sku: 'CAP-38S',
+    type: 'cap',
+    sizeOrType: '38 mm wide neck',
+    description: '38mm Wide Neck Screw Cap with EPE Liner',
+    priceA: 2.80,
+    priceB: 2.45,
+    priceC: 2.20,
+    currentStock: 18000,
+    minimumStock: 5000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-204',
+    name: '45mm Cap',
+    sku: 'CAP-45S',
+    type: 'cap',
+    sizeOrType: '45 mm jar cap',
+    description: '45mm Heavy Duty Seal Screw Cap',
+    priceA: 4.10,
+    priceB: 3.60,
+    priceC: 3.30,
+    currentStock: 1400,
+    minimumStock: 3000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-205',
+    name: 'Child Resistant Cap',
+    sku: 'CAP-CRC',
+    type: 'cap',
+    sizeOrType: '28 mm CRC',
+    description: '28mm Push & Turn Child Resistant Safety Cap',
+    priceA: 3.80,
+    priceB: 3.30,
+    priceC: 2.95,
+    currentStock: 16500,
+    minimumStock: 4000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-206',
+    name: 'Custom Cap',
+    sku: 'CAP-CUST',
+    type: 'cap',
+    sizeOrType: 'Custom Spec',
+    description: 'Custom Colored Embossed Brand Cap',
+    priceA: 3.20,
+    priceB: 2.80,
+    priceC: 2.50,
+    currentStock: 8900,
+    minimumStock: 2500,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  }
+];
+
+export const initialOrders: Order[] = [
+  {
+    id: 'ORD-10492',
+    orderNumber: 'ORD-10492',
+    customerId: 'CUS-1001',
+    customerName: 'Dr. Rajesh Patel',
+    companyName: 'MediCare Labs',
+    items: [
+      {
+        productId: 'PRD-105',
+        productName: '1L Bottle',
+        productType: 'bottle',
+        priceCategory: 'A',
+        unitPrice: 14.00,
+        quantity: 5000,
+        subtotal: 70000
+      },
+      {
+        productId: 'PRD-201',
+        productName: '28mm Standard Cap',
+        productType: 'cap',
+        priceCategory: 'A',
+        unitPrice: 1.50,
+        quantity: 5000,
+        subtotal: 7500
+      }
+    ],
+    subtotal: 77500,
+    gstAmount: 13950,
+    gstRate: 18,
+    totalAmount: 91450,
+    orderStatus: 'dispatched',
+    paymentStatus: 'partially_paid',
+    paidAmount: 50000,
+    orderDate: '2026-08-16',
+    notes: 'Urgent delivery for pharma batch'
+  },
+  {
+    id: 'ORD-10491',
+    orderNumber: 'ORD-10491',
+    customerId: 'CUS-1002',
+    customerName: 'Suresh Patel',
+    companyName: 'Patel Distributors',
+    items: [
+      {
+        productId: 'PRD-104',
+        productName: '500ml Bottle',
+        productType: 'bottle',
+        priceCategory: 'B',
+        unitPrice: 7.80,
+        quantity: 10000,
+        subtotal: 78000
+      },
+      {
+        productId: 'PRD-202',
+        productName: '28mm Flip Cap',
+        productType: 'cap',
+        priceCategory: 'B',
+        unitPrice: 1.90,
+        quantity: 10000,
+        subtotal: 19000
+      }
+    ],
+    subtotal: 97000,
+    gstAmount: 17460,
+    gstRate: 18,
+    totalAmount: 114460,
+    orderStatus: 'completed',
+    paymentStatus: 'paid',
+    paidAmount: 114460,
+    orderDate: '2026-08-14',
+    notes: 'Regular wholesale order'
+  },
+  {
+    id: 'ORD-10490',
+    orderNumber: 'ORD-10490',
+    customerId: 'CUS-1005',
+    customerName: 'Manish Sharma',
+    companyName: 'Zenith Lifesciences',
+    items: [
+      {
+        productId: 'PRD-107',
+        productName: '5L Bottle',
+        productType: 'bottle',
+        priceCategory: 'B',
+        unitPrice: 49.00,
+        quantity: 2000,
+        subtotal: 98000
+      },
+      {
+        productId: 'PRD-204',
+        productName: '45mm Cap',
+        productType: 'cap',
+        priceCategory: 'B',
+        unitPrice: 3.60,
+        quantity: 2000,
+        subtotal: 7200
+      }
+    ],
+    subtotal: 105200,
+    gstAmount: 18936,
+    gstRate: 18,
+    totalAmount: 124136,
+    orderStatus: 'pending',
+    paymentStatus: 'pending',
+    paidAmount: 0,
+    orderDate: '2026-08-17',
+    notes: 'Awaiting dispatch confirmation'
+  },
+  {
+    id: 'ORD-10489',
+    orderNumber: 'ORD-10489',
+    customerId: 'CUS-1010',
+    customerName: 'Sneha Kapadia',
+    companyName: 'Blue Ocean Cosmetics',
+    items: [
+      {
+        productId: 'PRD-108',
+        productName: 'Custom PET Bottle',
+        productType: 'bottle',
+        priceCategory: 'C',
+        unitPrice: 15.00,
+        quantity: 8000,
+        subtotal: 120000
+      },
+      {
+        productId: 'PRD-206',
+        productName: 'Custom Cap',
+        productType: 'cap',
+        priceCategory: 'C',
+        unitPrice: 2.50,
+        quantity: 8000,
+        subtotal: 20000
+      }
+    ],
+    subtotal: 140000,
+    gstAmount: 25200,
+    gstRate: 18,
+    totalAmount: 165200,
+    orderStatus: 'completed',
+    paymentStatus: 'paid',
+    paidAmount: 165200,
+    orderDate: '2026-08-10',
+    notes: 'Custom branding order'
+  },
+  {
+    id: 'ORD-10488',
+    orderNumber: 'ORD-10488',
+    customerId: 'CUS-1003',
+    customerName: 'Anil Agarwal',
+    companyName: 'ABC Pharma Pvt Ltd',
+    items: [
+      {
+        productId: 'PRD-101',
+        productName: '100ml Bottle',
+        productType: 'bottle',
+        priceCategory: 'C',
+        unitPrice: 2.80,
+        quantity: 15000,
+        subtotal: 42000
+      },
+      {
+        productId: 'PRD-205',
+        productName: 'Child Resistant Cap',
+        productType: 'cap',
+        priceCategory: 'C',
+        unitPrice: 2.95,
+        quantity: 15000,
+        subtotal: 44250
+      }
+    ],
+    subtotal: 86250,
+    gstAmount: 15525,
+    gstRate: 18,
+    totalAmount: 101775,
+    orderStatus: 'confirmed',
+    paymentStatus: 'pending',
+    paidAmount: 0,
+    orderDate: '2026-08-15',
+    notes: 'Special price category C agreed'
+  }
+];
+
+export const initialDispatches: Dispatch[] = [
+  {
+    id: 'DSP-8821',
+    dispatchNumber: 'DSP-8821',
+    orderId: 'ORD-10492',
+    orderNumber: 'ORD-10492',
+    customerName: 'MediCare Labs',
+    items: [
+      { productId: 'PRD-105', productName: '1L Bottle', quantity: 5000 },
+      { productId: 'PRD-201', productName: '28mm Standard Cap', quantity: 5000 }
+    ],
+    dispatchDate: '2026-08-16',
+    vehicleNumber: 'GJ-06-AX-4890',
+    driverName: 'Ramesh Patel',
+    driverPhone: '+91 98987 11223',
+    status: 'dispatched',
+    notes: 'Delivered via Express Logistics',
+    createdAt: '2026-08-16'
+  },
+  {
+    id: 'DSP-8820',
+    dispatchNumber: 'DSP-8820',
+    orderId: 'ORD-10491',
+    orderNumber: 'ORD-10491',
+    customerName: 'Patel Distributors',
+    items: [
+      { productId: 'PRD-104', productName: '500ml Bottle', quantity: 10000 },
+      { productId: 'PRD-202', productName: '28mm Flip Cap', quantity: 10000 }
+    ],
+    dispatchDate: '2026-08-14',
+    vehicleNumber: 'GJ-05-BT-9012',
+    driverName: 'Vikram Singh',
+    driverPhone: '+91 97123 44556',
+    status: 'delivered',
+    notes: 'Signed proof of delivery received',
+    createdAt: '2026-08-14'
+  }
+];
+
+export const initialPayments: Payment[] = [
+  {
+    id: 'REC-5021',
+    receiptNumber: 'REC-5021',
+    orderId: 'ORD-10492',
+    orderNumber: 'ORD-10492',
+    customerId: 'CUS-1001',
+    customerName: 'MediCare Labs',
+    amount: 50000,
+    paymentMethod: 'bank_transfer',
+    paymentDate: '2026-08-16',
+    notes: 'Advance part payment via NEFT'
+  },
+  {
+    id: 'REC-5020',
+    receiptNumber: 'REC-5020',
+    orderId: 'ORD-10491',
+    orderNumber: 'ORD-10491',
+    customerId: 'CUS-1002',
+    customerName: 'Patel Distributors',
+    amount: 114460,
+    paymentMethod: 'upi',
+    paymentDate: '2026-08-14',
+    notes: 'Full payment cleared'
+  },
+  {
+    id: 'REC-5019',
+    receiptNumber: 'REC-5019',
+    orderId: 'ORD-10489',
+    orderNumber: 'ORD-10489',
+    customerId: 'CUS-1010',
+    customerName: 'Blue Ocean Cosmetics',
+    amount: 165200,
+    paymentMethod: 'bank_transfer',
+    paymentDate: '2026-08-11',
+    notes: 'RTGS transfer received'
+  }
+];
+
+export const initialExpenses: Expense[] = [
+  {
+    id: 'EXP-301',
+    category: 'raw_materials',
+    amount: 320000,
+    description: 'Purchase of 10 Metric Tons PET Granules Grade A from Reliance Polymers',
+    expenseDate: '2026-08-05',
+    status: 'paid',
+    paymentMethod: 'bank_transfer'
+  },
+  {
+    id: 'EXP-302',
+    category: 'utilities',
+    amount: 48500,
+    description: 'Factory Electricity Bill for July 2026 (MGVCL)',
+    expenseDate: '2026-08-08',
+    status: 'paid',
+    paymentMethod: 'bank_transfer'
+  },
+  {
+    id: 'EXP-303',
+    category: 'salaries',
+    amount: 285000,
+    description: 'Staff & Machine Operator Salaries for July 2026',
+    expenseDate: '2026-08-01',
+    status: 'paid',
+    paymentMethod: 'bank_transfer'
+  },
+  {
+    id: 'EXP-304',
+    category: 'logistics',
+    amount: 32000,
+    description: 'Transport freight charges for dispatch to Surat & Vapi',
+    expenseDate: '2026-08-15',
+    status: 'paid',
+    paymentMethod: 'upi'
+  },
+  {
+    id: 'EXP-305',
+    category: 'maintenance',
+    amount: 18500,
+    description: 'Routine maintenance of Injection Blow Molding Machine #2',
+    expenseDate: '2026-08-12',
+    status: 'paid',
+    paymentMethod: 'cheque'
+  }
+];
+
+export const initialRawMaterials: RawMaterial[] = [
+  {
+    id: 'RM-101',
+    name: 'PET Granules Grade A',
+    code: 'PET-GRA-01',
+    category: 'granules',
+    currentStock: 4500,
+    minimumStock: 2000,
+    unit: 'kg',
+    unitCost: 110.00,
+    supplier: 'Reliance Polymers Ltd',
+    status: 'healthy',
+    lastRestocked: '2026-08-05'
+  },
+  {
+    id: 'RM-102',
+    name: 'HDPE Polymer White',
+    code: 'HDPE-WHT-02',
+    category: 'granules',
+    currentStock: 1200,
+    minimumStock: 1500,
+    unit: 'kg',
+    unitCost: 125.00,
+    supplier: 'IOCL Polymers',
+    status: 'low_stock',
+    lastRestocked: '2026-07-20'
+  },
+  {
+    id: 'RM-103',
+    name: 'Blue Masterbatch',
+    code: 'MB-BLU-01',
+    category: 'masterbatch',
+    currentStock: 350,
+    minimumStock: 100,
+    unit: 'kg',
+    unitCost: 280.00,
+    supplier: 'Clariant Pigments',
+    status: 'healthy',
+    lastRestocked: '2026-08-01'
+  },
+  {
+    id: 'RM-104',
+    name: 'Standard Carton Boxes (500 Cap)',
+    code: 'PKG-BOX-500',
+    category: 'packaging',
+    currentStock: 80,
+    minimumStock: 150,
+    unit: 'boxes',
+    unitCost: 45.00,
+    supplier: 'Surat Packaging Ind',
+    status: 'low_stock',
+    lastRestocked: '2026-07-28'
+  },
+  {
+    id: 'RM-105',
+    name: 'EPE Liner Gaskets (28mm)',
+    code: 'CAP-LIN-28',
+    category: 'packaging',
+    currentStock: 65000,
+    minimumStock: 20000,
+    unit: 'pcs',
+    unitCost: 0.15,
+    supplier: 'FlexiSeals Tech',
+    status: 'healthy',
+    lastRestocked: '2026-08-10'
+  }
+];
+
+export const initialRawMaterialUsage: RawMaterialUsage[] = [
+  {
+    id: 'RMU-1001',
+    materialId: 'RM-101',
+    materialName: 'PET Granules Grade A',
+    quantity: 450,
+    unit: 'kg',
+    date: '2026-08-16',
+    productionBatch: 'BATCH-2026-08-16A',
+    notes: 'Used for 5000 units of 1L Bottle production'
+  },
+  {
+    id: 'RMU-1002',
+    materialId: 'RM-103',
+    materialName: 'Blue Masterbatch',
+    quantity: 12,
+    unit: 'kg',
+    date: '2026-08-16',
+    productionBatch: 'BATCH-2026-08-16A',
+    notes: 'Color masterbatch blending'
+  }
+];
+
+export const initialFinishedGoodsLogs: FinishedGoodsLog[] = [
+  {
+    id: 'FGL-9001',
+    productId: 'PRD-105',
+    productName: '1L Bottle',
+    type: 'bottle',
+    quantityProduced: 5000,
+    unit: 'pcs',
+    date: '2026-08-16',
+    notes: 'Batch output added to warehouse stock'
+  },
+  {
+    id: 'FGL-9002',
+    productId: 'PRD-201',
+    productName: '28mm Standard Cap',
+    type: 'cap',
+    quantityProduced: 10000,
+    unit: 'pcs',
+    date: '2026-08-15',
+    notes: 'Molding machine #1 output'
+  }
+];
+
+export const initialDocuments: DocumentItem[] = [
+  {
+    id: 'DOC-101',
+    name: 'GST Registration Certificate',
+    category: 'gst',
+    fileType: 'application/pdf',
+    fileSize: 452000,
+    downloadUrl: '#',
+    uploadDate: '2026-01-10'
+  },
+  {
+    id: 'DOC-102',
+    name: 'Factory License & Pollution Board Clearance',
+    category: 'kyc',
+    fileType: 'application/pdf',
+    fileSize: 1240000,
+    downloadUrl: '#',
+    uploadDate: '2026-02-14'
+  },
+  {
+    id: 'DOC-103',
+    name: 'Standard Wholesale Terms & Pricing Matrix 2026',
+    category: 'contract',
+    fileType: 'application/pdf',
+    fileSize: 680000,
+    downloadUrl: '#',
+    uploadDate: '2026-04-01'
+  },
+  {
+    id: 'DOC-104',
+    name: 'Sample Dispatch Invoice Template',
+    category: 'invoice',
+    fileType: 'application/pdf',
+    fileSize: 310000,
+    downloadUrl: '#',
+    uploadDate: '2026-05-10'
+  }
+];
+
+export const initialSettings: Settings = {
+  companyName: 'Angel Pet Packaging Solutions Pvt Ltd',
+  gstin: '24AAACA1234B1Z9',
+  phone: '+91 98250 99887',
+  email: 'sales@angelpetpackaging.com',
+  address: 'Plot 108, GIDC Industrial Estate, Makarpura, Vadodara, Gujarat 390010',
+  logoUrl: '',
+  invoicePrefix: 'ORD-',
+  gstRate: 18,
+  defaultPriceCategory: 'A',
+  enableNotifications: true
+};
