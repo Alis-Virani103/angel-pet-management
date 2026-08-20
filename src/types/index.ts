@@ -34,6 +34,12 @@ export interface Product {
   unit: string; // 'pcs', 'units', etc.
   status: ProductStatus;
   createdAt: string;
+  imageUrl?: string;
+  category?: string;
+  material?: string;
+  gsm?: string | number;
+  printing?: string;
+  dimensions?: string;
 }
 
 export type OrderStatus = 'pending' | 'confirmed' | 'dispatched' | 'completed' | 'cancelled';
