@@ -10,7 +10,7 @@ import {
   ShoppingCart,
   Eye,
   Edit,
-  Trash2,
+  Power,
   Phone,
   Building2,
   Tag
@@ -50,20 +50,13 @@ export const Customers: React.FC<CustomersProps> = ({
   };
 
   const handleToggleStatus = async (customer: Customer) => {
-    const newStatus: CustomerStatus = customer.status === 'active' ? 'inactive' : 'active';
-    try {
-      await updateCustomer(customer.id, { status: newStatus });
-      loadCustomers();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Deactivate / remove this customer?')) {
+    const isDeactivating = customer.status === 'active';
+    const actionName = isDeactivating ? 'deactivate' : 'activate';
+    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company} (${customer.name})?`)) {
+      const newStatus: CustomerStatus = isDeactivating ? 'inactive' : 'active';
       try {
-        await deleteCustomer(id);
-        loadCustomers();
+        await updateCustomer(customer.id, { status: newStatus });
+        await loadCustomers();
       } catch (e) {
         console.error(e);
       }
@@ -231,11 +224,15 @@ export const Customers: React.FC<CustomersProps> = ({
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(cus.id)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Deactivate Customer"
+                          onClick={() => handleToggleStatus(cus)}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            cus.status === 'active'
+                              ? 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'
+                              : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                          }`}
+                          title={cus.status === 'active' ? 'Deactivate Customer' : 'Activate Customer'}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Power className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

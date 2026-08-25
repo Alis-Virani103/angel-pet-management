@@ -84,6 +84,31 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = 2500): Promise<T> {
   ]);
 }
 
+// Helper to merge LocalStorage items and Remote Firestore items safely without losing local state
+function mergeLocalAndRemote<T extends { id: string }>(localList: T[], remoteList: T[]): T[] {
+  const remoteMap = new Map(remoteList.map((item) => [item.id, item]));
+  const merged: T[] = [];
+  const processedIds = new Set<string>();
+
+  for (const localItem of localList) {
+    processedIds.add(localItem.id);
+    const remoteItem = remoteMap.get(localItem.id);
+    if (remoteItem) {
+      merged.push({ ...remoteItem, ...localItem });
+    } else {
+      merged.push(localItem);
+    }
+  }
+
+  for (const remoteItem of remoteList) {
+    if (!processedIds.has(remoteItem.id)) {
+      merged.push(remoteItem);
+    }
+  }
+
+  return merged;
+}
+
 // Ensure database is seeded with initial data on first load
 export async function seedDatabase(force = false): Promise<void> {
   const isAlreadyInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
@@ -164,19 +189,21 @@ seedDatabase().catch((err) => console.error('Seed check error:', err));
 
 // ================= CUSTOMERS =================
 export async function getCustomers(): Promise<Customer[]> {
+  const localItems = getLocalItem<Customer[]>(STORAGE_KEYS.CUSTOMERS, initialCustomers);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'customers')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Customer);
-        setLocalItem(STORAGE_KEYS.CUSTOMERS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Customer);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.CUSTOMERS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getCustomers failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Customer[]>(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+  return localItems;
 }
 
 export async function addCustomer(data: Omit<Customer, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'> & { id?: string }): Promise<Customer> {
@@ -242,8 +269,8 @@ export async function updateCustomer(id: string, updates: Partial<Customer>): Pr
   }
   setLocalItem(STORAGE_KEYS.CUSTOMERS, newList);
 
-  if (isLiveFirebaseConfigured && db) {
-    withTimeout(setDoc(doc(db, 'customers', id), updates, { merge: true }), 2500).catch((e) =>
+  if (isLiveFirebaseConfigured && db && updated) {
+    withTimeout(setDoc(doc(db, 'customers', id), updated, { merge: true }), 2500).catch((e) =>
       console.error('Error updating customer in Firebase:', e)
     );
   }
@@ -264,19 +291,21 @@ export async function deleteCustomer(id: string): Promise<void> {
 
 // ================= PRODUCTS =================
 export async function getProducts(): Promise<Product[]> {
+  const localItems = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'products')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Product);
-        setLocalItem(STORAGE_KEYS.PRODUCTS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Product);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.PRODUCTS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getProducts failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
+  return localItems;
 }
 
 export async function addProduct(data: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
@@ -317,8 +346,8 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   }
   setLocalItem(STORAGE_KEYS.PRODUCTS, newList);
 
-  if (isLiveFirebaseConfigured && db) {
-    withTimeout(setDoc(doc(db, 'products', id), updates, { merge: true }), 2500).catch((e) =>
+  if (isLiveFirebaseConfigured && db && updated) {
+    withTimeout(setDoc(doc(db, 'products', id), updated, { merge: true }), 2500).catch((e) =>
       console.error('Error updating product in Firebase:', e)
     );
   }
@@ -340,19 +369,21 @@ export async function deleteProduct(id: string): Promise<void> {
 
 // ================= ORDERS =================
 export async function getOrders(): Promise<Order[]> {
+  const localItems = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'orders')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Order);
-        setLocalItem(STORAGE_KEYS.ORDERS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Order);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.ORDERS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getOrders failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
+  return localItems;
 }
 
 export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'paidAmount' | 'paymentStatus' | 'orderStatus' | 'orderDate'>): Promise<Order> {
@@ -410,8 +441,8 @@ export async function updateOrder(id: string, updates: Partial<Order>): Promise<
   }
   setLocalItem(STORAGE_KEYS.ORDERS, newList);
 
-  if (isLiveFirebaseConfigured && db) {
-    withTimeout(setDoc(doc(db, 'orders', id), updates, { merge: true }), 2500).catch((e) =>
+  if (isLiveFirebaseConfigured && db && updated) {
+    withTimeout(setDoc(doc(db, 'orders', id), updated, { merge: true }), 2500).catch((e) =>
       console.error('Error updating order in Firebase:', e)
     );
   }
@@ -426,19 +457,21 @@ export async function updateOrderStatus(id: string, newStatus: Order['orderStatu
 
 // ================= DISPATCHES =================
 export async function getDispatches(): Promise<Dispatch[]> {
+  const localItems = getLocalItem<Dispatch[]>(STORAGE_KEYS.DISPATCHES, initialDispatches);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'dispatches')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Dispatch);
-        setLocalItem(STORAGE_KEYS.DISPATCHES, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Dispatch);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.DISPATCHES, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getDispatches failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Dispatch[]>(STORAGE_KEYS.DISPATCHES, initialDispatches);
+  return localItems;
 }
 
 export async function addDispatch(data: Omit<Dispatch, 'id' | 'dispatchNumber' | 'createdAt'>): Promise<Dispatch> {
@@ -489,7 +522,7 @@ export async function updateDispatchStatus(id: string, newStatus: Dispatch['stat
   setLocalItem(STORAGE_KEYS.DISPATCHES, newList);
 
   if (isLiveFirebaseConfigured && db) {
-    withTimeout(setDoc(doc(db, 'dispatches', id), { status: newStatus }, { merge: true }), 2500).catch((e) =>
+    withTimeout(setDoc(doc(db, 'dispatches', id), updatedDispatch, { merge: true }), 2500).catch((e) =>
       console.error('Error updating dispatch in Firebase:', e)
     );
   }
@@ -543,19 +576,21 @@ async function processDispatchStockDeduction(dispatch: Dispatch): Promise<void> 
 
 // ================= PAYMENTS =================
 export async function getPayments(): Promise<Payment[]> {
+  const localItems = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'payments')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Payment);
-        setLocalItem(STORAGE_KEYS.PAYMENTS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Payment);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.PAYMENTS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getPayments failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+  return localItems;
 }
 
 export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): Promise<Payment> {
@@ -592,19 +627,47 @@ export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): P
 
 // ================= EXPENSES =================
 export async function getExpenses(): Promise<Expense[]> {
+  const localItems = getLocalItem<Expense[]>(STORAGE_KEYS.EXPENSES, initialExpenses);
+  let items: Expense[] = localItems;
+
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'expenses')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as Expense);
-        setLocalItem(STORAGE_KEYS.EXPENSES, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as Expense);
+        items = mergeLocalAndRemote(localItems, remoteItems);
       }
     } catch (e) {
       console.warn('Firebase getExpenses failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<Expense[]>(STORAGE_KEYS.EXPENSES, initialExpenses);
+
+  // Specifically remove accidental test records EXP-664 ("something") and EXP-743 ("hi") if present
+  const testIdsToRemove = items
+    .filter(
+      (e) =>
+        e.id === 'EXP-664' ||
+        e.id === 'EXP-743' ||
+        e.description?.trim().toLowerCase() === 'something' ||
+        e.description?.trim().toLowerCase() === 'hi'
+    )
+    .map((e) => e.id);
+
+  if (testIdsToRemove.length > 0) {
+    items = items.filter((e) => !testIdsToRemove.includes(e.id));
+    setLocalItem(STORAGE_KEYS.EXPENSES, items);
+    if (isLiveFirebaseConfigured && db) {
+      for (const tid of testIdsToRemove) {
+        withTimeout(deleteDoc(doc(db, 'expenses', tid)), 2500).catch((err) =>
+          console.error(`Error purging test expense ${tid} from Firebase:`, err)
+        );
+      }
+    }
+  } else {
+    setLocalItem(STORAGE_KEYS.EXPENSES, items);
+  }
+
+  return items;
 }
 
 export async function addExpense(data: Omit<Expense, 'id'>): Promise<Expense> {
@@ -612,7 +675,8 @@ export async function addExpense(data: Omit<Expense, 'id'>): Promise<Expense> {
   const newExpense: Expense = { ...data, id };
 
   const list = getLocalItem<Expense[]>(STORAGE_KEYS.EXPENSES, initialExpenses);
-  setLocalItem(STORAGE_KEYS.EXPENSES, [newExpense, ...list]);
+  const updatedList = [newExpense, ...list.filter((item) => item.id !== id)];
+  setLocalItem(STORAGE_KEYS.EXPENSES, updatedList);
 
   if (isLiveFirebaseConfigured && db) {
     withTimeout(setDoc(doc(db, 'expenses', id), newExpense), 2500).catch((e) =>
@@ -623,21 +687,35 @@ export async function addExpense(data: Omit<Expense, 'id'>): Promise<Expense> {
   return newExpense;
 }
 
+export async function deleteExpense(id: string): Promise<void> {
+  const list = getLocalItem<Expense[]>(STORAGE_KEYS.EXPENSES, initialExpenses);
+  const newList = list.filter((item) => item.id !== id);
+  setLocalItem(STORAGE_KEYS.EXPENSES, newList);
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(deleteDoc(doc(db, 'expenses', id)), 2500).catch((e) =>
+      console.error('Error deleting expense in Firebase:', e)
+    );
+  }
+}
+
 // ================= RAW MATERIALS & USAGE =================
 export async function getRawMaterials(): Promise<RawMaterial[]> {
+  const localItems = getLocalItem<RawMaterial[]>(STORAGE_KEYS.RAW_MATERIALS, initialRawMaterials);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'rawMaterials')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as RawMaterial);
-        setLocalItem(STORAGE_KEYS.RAW_MATERIALS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as RawMaterial);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.RAW_MATERIALS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getRawMaterials failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<RawMaterial[]>(STORAGE_KEYS.RAW_MATERIALS, initialRawMaterials);
+  return localItems;
 }
 
 export async function addRawMaterial(data: Omit<RawMaterial, 'id' | 'status' | 'lastRestocked'>): Promise<RawMaterial> {
@@ -683,8 +761,8 @@ export async function updateRawMaterial(id: string, updates: Partial<RawMaterial
   }
   setLocalItem(STORAGE_KEYS.RAW_MATERIALS, newList);
 
-  if (isLiveFirebaseConfigured && db) {
-    withTimeout(setDoc(doc(db, 'rawMaterials', id), updates, { merge: true }), 2500).catch((e) =>
+  if (isLiveFirebaseConfigured && db && updated) {
+    withTimeout(setDoc(doc(db, 'rawMaterials', id), updated, { merge: true }), 2500).catch((e) =>
       console.error('Error updating raw material in Firebase:', e)
     );
   }
@@ -705,19 +783,21 @@ export async function deleteRawMaterial(id: string): Promise<void> {
 }
 
 export async function getRawMaterialUsage(): Promise<RawMaterialUsage[]> {
+  const localItems = getLocalItem<RawMaterialUsage[]>(STORAGE_KEYS.RAW_MATERIAL_USAGE, initialRawMaterialUsage);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'rawMaterialUsage')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as RawMaterialUsage);
-        setLocalItem(STORAGE_KEYS.RAW_MATERIAL_USAGE, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as RawMaterialUsage);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.RAW_MATERIAL_USAGE, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getRawMaterialUsage failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<RawMaterialUsage[]>(STORAGE_KEYS.RAW_MATERIAL_USAGE, initialRawMaterialUsage);
+  return localItems;
 }
 
 export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>): Promise<RawMaterialUsage> {
@@ -746,19 +826,21 @@ export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>)
 
 // ================= FINISHED GOODS LOG =================
 export async function getFinishedGoodsLogs(): Promise<FinishedGoodsLog[]> {
+  const localItems = getLocalItem<FinishedGoodsLog[]>(STORAGE_KEYS.FINISHED_GOODS_LOGS, initialFinishedGoodsLogs);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'finishedGoodsLogs')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as FinishedGoodsLog);
-        setLocalItem(STORAGE_KEYS.FINISHED_GOODS_LOGS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as FinishedGoodsLog);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.FINISHED_GOODS_LOGS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getFinishedGoodsLogs failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<FinishedGoodsLog[]>(STORAGE_KEYS.FINISHED_GOODS_LOGS, initialFinishedGoodsLogs);
+  return localItems;
 }
 
 export async function addFinishedGoodsLog(data: Omit<FinishedGoodsLog, 'id'>): Promise<FinishedGoodsLog> {
@@ -788,19 +870,21 @@ export async function addFinishedGoodsLog(data: Omit<FinishedGoodsLog, 'id'>): P
 
 // ================= DOCUMENTS & FIREBASE STORAGE =================
 export async function getDocuments(): Promise<DocumentItem[]> {
+  const localItems = getLocalItem<DocumentItem[]>(STORAGE_KEYS.DOCUMENTS, initialDocuments);
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'documents')), 2000);
       if (snap && snap.docs.length > 0) {
-        const items = snap.docs.map((d) => d.data() as DocumentItem);
-        setLocalItem(STORAGE_KEYS.DOCUMENTS, items);
-        return items;
+        const remoteItems = snap.docs.map((d) => d.data() as DocumentItem);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.DOCUMENTS, merged);
+        return merged;
       }
     } catch (e) {
       console.warn('Firebase getDocuments failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return getLocalItem<DocumentItem[]>(STORAGE_KEYS.DOCUMENTS, initialDocuments);
+  return localItems;
 }
 
 export async function uploadDocument(file: File, category: DocumentItem['category']): Promise<DocumentItem> {

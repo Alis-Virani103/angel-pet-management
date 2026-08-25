@@ -44,12 +44,15 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const loadData = async () => {
     try {
       const [cusList, prdList] = await Promise.all([getCustomers(), getProducts()]);
-      setCustomers(cusList);
+      const activeCustomers = cusList.filter((c) => c.status === 'active');
+      setCustomers(activeCustomers);
       setProducts(prdList);
 
-      if (cusList.length > 0 && !selectedCustomerId) {
-        setSelectedCustomerId(cusList[0].id);
-        setPriceCategory(cusList[0].priceCategory);
+      if (activeCustomers.length > 0 && (!selectedCustomerId || !activeCustomers.some((c) => c.id === selectedCustomerId))) {
+        setSelectedCustomerId(activeCustomers[0].id);
+        setPriceCategory(activeCustomers[0].priceCategory);
+      } else if (activeCustomers.length === 0) {
+        setSelectedCustomerId('');
       }
 
       const bottles = prdList.filter((p) => p.type === 'bottle');
@@ -165,6 +168,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         gstAmount,
         gstRate: includeGst ? 18 : 0,
         totalAmount: grandTotal,
+        totalQuantity: quantity,
         notes
       });
 

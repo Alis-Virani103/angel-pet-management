@@ -4,6 +4,7 @@ import { StatCard } from '../components/common/StatCard';
 import { Badge } from '../components/common/Badge';
 import { Order, Product, Customer } from '../types';
 import { getOrders, getProducts, getCustomers, getPayments } from '../services/db';
+import { getOrderQuantity } from '../utils/orderUtils';
 import {
   IndianRupee,
   ShoppingCart,
@@ -353,7 +354,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </td>
                     <td className="py-3 px-3 font-semibold">
-                      {order.items.reduce((sum, i) => sum + i.quantity, 0).toLocaleString()}
+                      {getOrderQuantity(order).toLocaleString()}
                     </td>
                     <td className="py-3 px-3 font-bold text-slate-900">
                       ₹{order.totalAmount.toLocaleString()}

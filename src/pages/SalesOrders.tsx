@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Order, OrderStatus, PaymentStatus, PriceCategory } from '../types';
 import { getOrders, updateOrderStatus } from '../services/db';
+import { getOrderQuantity } from '../utils/orderUtils';
 import { Badge } from '../components/common/Badge';
 import {
   Search,
@@ -214,7 +215,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                 sortedOrders.map((order) => {
                   const bottleItem = order.items.find((i) => i.productType === 'bottle');
                   const capItem = order.items.find((i) => i.productType === 'cap');
-                  const totalQty = order.items.reduce((sum, i) => sum + i.quantity, 0);
+                  const totalQty = getOrderQuantity(order);
 
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">

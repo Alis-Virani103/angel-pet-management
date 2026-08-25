@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Customer, Order } from '../types';
-import { getCustomers, getOrders } from '../services/db';
+import { Customer, Order, CustomerStatus } from '../types';
+import { getCustomers, getOrders, updateCustomer } from '../services/db';
 import { Badge } from '../components/common/Badge';
 import {
   ArrowLeft,
@@ -12,7 +12,8 @@ import {
   ShoppingCart,
   IndianRupee,
   Calendar,
-  Plus
+  Plus,
+  Power
 } from 'lucide-react';
 
 interface CustomerProfileProps {
@@ -45,6 +46,21 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    if (!customer) return;
+    const isDeactivating = customer.status === 'active';
+    const actionName = isDeactivating ? 'deactivate' : 'activate';
+    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company} (${customer.name})?`)) {
+      const newStatus: CustomerStatus = isDeactivating ? 'inactive' : 'active';
+      try {
+        const updated = await updateCustomer(customer.id, { status: newStatus });
+        setCustomer(updated);
+      } catch (e) {
+        console.error(e);
+      }
     }
   };
 
@@ -89,13 +105,27 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
           </div>
         </div>
 
-        <button
-          onClick={onOpenNewOrderModal}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Order for Customer</span>
-        </button>
+        <div className="flex items-center space-x-3 self-start sm:self-auto">
+          <button
+            onClick={handleToggleStatus}
+            className={`px-3 py-2.5 font-semibold text-xs rounded-xl border transition-colors flex items-center space-x-1.5 ${
+              customer.status === 'active'
+                ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            <Power className="w-4 h-4" />
+            <span>{customer.status === 'active' ? 'Deactivate Customer' : 'Activate Customer'}</span>
+          </button>
+
+          <button
+            onClick={onOpenNewOrderModal}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Order for Customer</span>
+          </button>
+        </div>
       </div>
 
       {/* Spend & Metrics Cards */}

@@ -66,6 +66,7 @@ export interface Order {
   gstAmount: number;
   gstRate: number; // e.g. 18
   totalAmount: number;
+  totalQuantity?: number;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   paidAmount: number;
