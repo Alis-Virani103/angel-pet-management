@@ -293,21 +293,35 @@ export async function deleteCustomer(id: string): Promise<void> {
 export async function getProducts(): Promise<Product[]> {
   const localItems = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
   const initialMap = new Map(initialProducts.map((p) => [p.id, p]));
-  const updatedLocalItems = localItems.map((p) => {
-    const init = initialMap.get(p.id);
-    if (init && init.imageUrl && (p.imageUrl !== init.imageUrl || p.cloudinaryPublicId !== init.cloudinaryPublicId)) {
-      return { ...p, imageUrl: init.imageUrl, cloudinaryPublicId: init.cloudinaryPublicId };
+
+  const mergedWithInitial: Product[] = [];
+  const processedIds = new Set<string>();
+
+  for (const item of localItems) {
+    processedIds.add(item.id);
+    const init = initialMap.get(item.id);
+    if (init && init.imageUrl && (item.imageUrl !== init.imageUrl || item.cloudinaryPublicId !== init.cloudinaryPublicId)) {
+      mergedWithInitial.push({ ...item, imageUrl: init.imageUrl, cloudinaryPublicId: init.cloudinaryPublicId });
+    } else {
+      mergedWithInitial.push(item);
     }
-    return p;
-  });
-  setLocalItem(STORAGE_KEYS.PRODUCTS, updatedLocalItems);
+  }
+
+  for (const init of initialProducts) {
+    if (!processedIds.has(init.id)) {
+      mergedWithInitial.push(init);
+      processedIds.add(init.id);
+    }
+  }
+
+  setLocalItem(STORAGE_KEYS.PRODUCTS, mergedWithInitial);
 
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'products')), 2000);
       if (snap && snap.docs.length > 0) {
         const remoteItems = snap.docs.map((d) => d.data() as Product);
-        const merged = mergeLocalAndRemote(updatedLocalItems, remoteItems);
+        const merged = mergeLocalAndRemote(mergedWithInitial, remoteItems);
         setLocalItem(STORAGE_KEYS.PRODUCTS, merged);
         return merged;
       }
@@ -315,7 +329,7 @@ export async function getProducts(): Promise<Product[]> {
       console.warn('Firebase getProducts failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return updatedLocalItems;
+  return mergedWithInitial;
 }
 
 export async function addProduct(data: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
