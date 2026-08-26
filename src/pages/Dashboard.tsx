@@ -5,6 +5,7 @@ import { Badge } from '../components/common/Badge';
 import { Order, Product, Customer } from '../types';
 import { getOrders, getProducts, getCustomers, getPayments } from '../services/db';
 import { getOrderQuantity } from '../utils/orderUtils';
+import { getProductImageUrl } from '../utils/productImages';
 import {
   IndianRupee,
   ShoppingCart,
@@ -286,17 +287,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 All product stock levels are healthy!
               </div>
             ) : (
-              lowStockItems.map((item) => (
-                <div key={item.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                    <p className="text-[11px] text-slate-500">
-                      Stock: <span className="font-bold text-rose-600">{item.currentStock.toLocaleString()}</span> / Min: {item.minimumStock.toLocaleString()} {item.unit}
-                    </p>
+              lowStockItems.map((item) => {
+                const imgUrl = getProductImageUrl(item);
+                return (
+                  <div key={item.id} className="py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                        {imgUrl ? (
+                          <img
+                            src={imgUrl}
+                            alt={item.name}
+                            className="w-full h-full object-contain p-0.5"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Boxes className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-[11px] text-slate-500">
+                          Stock: <span className="font-bold text-rose-600">{item.currentStock.toLocaleString()}</span> / Min: {item.minimumStock.toLocaleString()} {item.unit}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge status="low_stock" />
                   </div>
-                  <Badge status="low_stock" />
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 

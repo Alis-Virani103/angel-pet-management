@@ -50,7 +50,7 @@ const STORAGE_KEYS = {
   FINISHED_GOODS_LOGS: 'angel_pet_finished_goods_logs',
   DOCUMENTS: 'angel_pet_documents',
   SETTINGS: 'angel_pet_settings',
-  INITIALIZED: 'angel_pet_seed_initialized_v1'
+  INITIALIZED: 'angel_pet_seed_initialized_v3'
 };
 
 // Helper to interact with LocalStorage
@@ -292,12 +292,22 @@ export async function deleteCustomer(id: string): Promise<void> {
 // ================= PRODUCTS =================
 export async function getProducts(): Promise<Product[]> {
   const localItems = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
+  const initialMap = new Map(initialProducts.map((p) => [p.id, p]));
+  const updatedLocalItems = localItems.map((p) => {
+    const init = initialMap.get(p.id);
+    if (init && init.imageUrl && (p.imageUrl !== init.imageUrl || p.cloudinaryPublicId !== init.cloudinaryPublicId)) {
+      return { ...p, imageUrl: init.imageUrl, cloudinaryPublicId: init.cloudinaryPublicId };
+    }
+    return p;
+  });
+  setLocalItem(STORAGE_KEYS.PRODUCTS, updatedLocalItems);
+
   if (isLiveFirebaseConfigured && db) {
     try {
       const snap = await withTimeout(getDocs(collection(db, 'products')), 2000);
       if (snap && snap.docs.length > 0) {
         const remoteItems = snap.docs.map((d) => d.data() as Product);
-        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        const merged = mergeLocalAndRemote(updatedLocalItems, remoteItems);
         setLocalItem(STORAGE_KEYS.PRODUCTS, merged);
         return merged;
       }
@@ -305,7 +315,7 @@ export async function getProducts(): Promise<Product[]> {
       console.warn('Firebase getProducts failed or timed out, falling back to LocalStorage:', e);
     }
   }
-  return localItems;
+  return updatedLocalItems;
 }
 
 export async function addProduct(data: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {

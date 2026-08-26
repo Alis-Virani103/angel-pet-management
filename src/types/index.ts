@@ -35,6 +35,7 @@ export interface Product {
   status: ProductStatus;
   createdAt: string;
   imageUrl?: string;
+  cloudinaryPublicId?: string;
   category?: string;
   material?: string;
   gsm?: string | number;

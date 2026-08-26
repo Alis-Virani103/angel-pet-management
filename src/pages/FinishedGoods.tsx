@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, FinishedGoodsLog } from '../types';
 import { getProducts, getFinishedGoodsLogs } from '../services/db';
+import { getProductImageUrl } from '../utils/productImages';
 import { Badge } from '../components/common/Badge';
 import { StatCard } from '../components/common/StatCard';
 import {
@@ -10,7 +11,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface FinishedGoodsProps {
@@ -157,11 +159,30 @@ export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedG
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                 {filteredProducts.map((p) => {
                   const isLowStock = p.currentStock <= p.minimumStock;
+                  const imgUrl = getProductImageUrl(p);
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{p.name}</div>
-                        <div className="text-[11px] text-slate-400">{p.sku}</div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center overflow-hidden shrink-0">
+                            {imgUrl ? (
+                              <img
+                                src={imgUrl}
+                                alt={p.name}
+                                className="w-full h-full object-contain p-0.5"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <Boxes className="w-5 h-5 text-slate-400" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{p.name}</div>
+                            <div className="text-[11px] text-slate-400">{p.sku}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 capitalize text-slate-600">{p.type}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
