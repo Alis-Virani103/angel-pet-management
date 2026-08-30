@@ -45,28 +45,29 @@ export const Modal: React.FC<ModalProps> = ({
   }[maxWidth];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
       <div
-        className={`bg-white w-full rounded-3xl shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-in zoom-in-95 duration-200 ${maxWidthClasses}`}
+        className={`bg-white w-full rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-in zoom-in-95 duration-200 my-auto ${maxWidthClasses}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h3>
-            {subtitle && <p className="text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>}
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">{title}</h3>
+            {subtitle && <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-200/60 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-200/60 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors shrink-0 ml-2"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Content */}
-        <div className="px-6 py-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="px-4 sm:px-6 py-4 sm:py-6 max-h-[82vh] sm:max-h-[80vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
 };
+

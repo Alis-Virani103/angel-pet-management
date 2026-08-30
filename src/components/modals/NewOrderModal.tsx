@@ -321,7 +321,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
             Select Customer Price Category
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { key: 'A' as PriceCategory, label: 'Category A (Standard)', desc: 'Standard retail customer pricing' },
               { key: 'B' as PriceCategory, label: 'Category B (Wholesale)', desc: 'Discounted wholesale rate' },

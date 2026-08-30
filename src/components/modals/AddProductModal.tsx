@@ -259,7 +259,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
             Price Tiers (A / B / C per unit)
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">Price A (Standard ₹)</label>
               <input

@@ -224,7 +224,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Time period filter buttons */}
-            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
               {['Today', 'This Week', 'This Month', 'This Quarter', 'This Year'].map((t) => (
                 <button
                   key={t}

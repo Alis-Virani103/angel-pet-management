@@ -19,21 +19,29 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onOpenAddFinishedGoodsModal
 }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Fixed Left Sidebar */}
-      <Sidebar collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />
+      {/* Sidebar (Desktop Fixed & Mobile Drawer) */}
+      <Sidebar
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed(!collapsed)}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+      />
 
       {/* Main Content Area */}
       <div
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
-          collapsed ? 'ml-20' : 'ml-64'
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ml-0 ${
+          collapsed ? 'md:ml-20' : 'md:ml-64'
         }`}
       >
         {/* Top Sticky Header */}
         <Header
           collapsed={collapsed}
+          mobileOpen={mobileMenuOpen}
+          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
           onOpenNewOrderModal={onOpenNewOrderModal}
           onOpenAddCustomerModal={onOpenAddCustomerModal}
           onOpenRecordPaymentModal={onOpenRecordPaymentModal}
@@ -42,10 +50,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         />
 
         {/* Page Container */}
-        <main className="flex-1 mt-16 p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 mt-16 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           <Outlet />
         </main>
       </div>
     </div>
   );
 };
+
