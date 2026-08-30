@@ -21,7 +21,10 @@ import type {
   FinishedGoodsLog,
   DocumentItem,
   Settings,
-  DashboardMetrics
+  DashboardMetrics,
+  PurchaseOrder,
+  PurchaseStatus,
+  PurchasePaymentStatus
 } from '../types';
 import {
   initialCustomers,
@@ -34,7 +37,8 @@ import {
   initialRawMaterialUsage,
   initialFinishedGoodsLogs,
   initialDocuments,
-  initialSettings
+  initialSettings,
+  initialPurchases
 } from '../data/seedData';
 
 // LocalStorage Keys for fallback
@@ -50,6 +54,7 @@ const STORAGE_KEYS = {
   FINISHED_GOODS_LOGS: 'angel_pet_finished_goods_logs',
   DOCUMENTS: 'angel_pet_documents',
   SETTINGS: 'angel_pet_settings',
+  PURCHASES: 'angel_pet_purchases',
   INITIALIZED: 'angel_pet_seed_initialized_v3'
 };
 
@@ -160,6 +165,10 @@ export async function seedDatabase(force = false): Promise<void> {
         for (const item of initialDocuments) {
           await withTimeout(setDoc(doc(db, 'documents', item.id), item), 1500).catch(() => {});
         }
+        // Seed Purchases
+        for (const item of initialPurchases) {
+          await withTimeout(setDoc(doc(db, 'purchases', item.id), item), 1500).catch(() => {});
+        }
         // Seed Settings
         await withTimeout(setDoc(doc(db, 'settings', 'company_settings'), initialSettings), 1500).catch(() => {});
       }
@@ -180,6 +189,7 @@ export async function seedDatabase(force = false): Promise<void> {
     setLocalItem(STORAGE_KEYS.FINISHED_GOODS_LOGS, initialFinishedGoodsLogs);
     setLocalItem(STORAGE_KEYS.DOCUMENTS, initialDocuments);
     setLocalItem(STORAGE_KEYS.SETTINGS, initialSettings);
+    setLocalItem(STORAGE_KEYS.PURCHASES, initialPurchases);
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
   }
 }
@@ -846,6 +856,174 @@ export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>)
   }
 
   return newUsage;
+}
+
+// ================= PURCHASES =================
+export async function getPurchases(): Promise<PurchaseOrder[]> {
+  const localItems = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  if (isLiveFirebaseConfigured && db) {
+    try {
+      const snap = await withTimeout(getDocs(collection(db, 'purchases')), 2000);
+      if (snap && snap.docs.length > 0) {
+        const remoteItems = snap.docs.map((d) => d.data() as PurchaseOrder);
+        const merged = mergeLocalAndRemote(localItems, remoteItems);
+        setLocalItem(STORAGE_KEYS.PURCHASES, merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('Firebase getPurchases failed or timed out, falling back to LocalStorage:', e);
+    }
+  }
+  return localItems;
+}
+
+export async function addPurchase(
+  purchaseData: Omit<PurchaseOrder, 'id' | 'purchaseNumber' | 'paidAmount' | 'paymentStatus' | 'createdAt'> & {
+    id?: string;
+    purchaseNumber?: string;
+    paidAmount?: number;
+    paymentStatus?: PurchasePaymentStatus;
+  }
+): Promise<PurchaseOrder> {
+  const randomNum = Math.floor(10000 + Math.random() * 90000);
+  const purchaseNumber = purchaseData.purchaseNumber || `PO-${randomNum}`;
+  const id = purchaseData.id || purchaseNumber;
+
+  const newPurchase: PurchaseOrder = {
+    ...purchaseData,
+    id,
+    purchaseNumber,
+    paidAmount: purchaseData.paidAmount || 0,
+    paymentStatus: purchaseData.paymentStatus || 'pending',
+    stockAdded: false,
+    createdAt: new Date().toISOString().split('T')[0]
+  };
+
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  setLocalItem(STORAGE_KEYS.PURCHASES, [newPurchase, ...list]);
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(setDoc(doc(db, 'purchases', newPurchase.id), newPurchase), 2500).catch((e) =>
+      console.error('Error adding purchase to Firebase:', e)
+    );
+  }
+
+  // Idempotent stock addition: if status is 'received' or 'completed', trigger stock increment once
+  if (newPurchase.status === 'received' || newPurchase.status === 'completed') {
+    return await processPurchaseStockAddition(newPurchase);
+  }
+
+  return newPurchase;
+}
+
+export async function updatePurchaseStatus(id: string, newStatus: PurchaseStatus): Promise<PurchaseOrder> {
+  const purchases = await getPurchases();
+  const target = purchases.find((p) => p.id === id);
+
+  if (!target) throw new Error('Purchase order not found');
+
+  const updated: PurchaseOrder = { ...target, status: newStatus };
+
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  const newList = list.map((item) => (item.id === id ? updated : item));
+  setLocalItem(STORAGE_KEYS.PURCHASES, newList);
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(setDoc(doc(db, 'purchases', id), { status: newStatus }, { merge: true }), 2500).catch((e) =>
+      console.error('Error updating purchase status in Firebase:', e)
+    );
+  }
+
+  // If transition to received or completed, apply stock addition idempotently
+  if (newStatus === 'received' || newStatus === 'completed') {
+    return await processPurchaseStockAddition(updated);
+  }
+
+  return updated;
+}
+
+export async function recordPurchasePayment(id: string, amount: number): Promise<PurchaseOrder> {
+  const purchases = await getPurchases();
+  const target = purchases.find((p) => p.id === id);
+
+  if (!target) throw new Error('Purchase order not found');
+
+  const newPaidAmount = target.paidAmount + amount;
+  const newPaymentStatus: PurchasePaymentStatus =
+    newPaidAmount >= target.totalAmount ? 'paid' : 'partially_paid';
+
+  const updated: PurchaseOrder = {
+    ...target,
+    paidAmount: newPaidAmount,
+    paymentStatus: newPaymentStatus
+  };
+
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  const newList = list.map((item) => (item.id === id ? updated : item));
+  setLocalItem(STORAGE_KEYS.PURCHASES, newList);
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(
+      setDoc(
+        doc(db, 'purchases', id),
+        { paidAmount: newPaidAmount, paymentStatus: newPaymentStatus },
+        { merge: true }
+      ),
+      2500
+    ).catch((e) => console.error('Error updating purchase payment in Firebase:', e));
+  }
+
+  return updated;
+}
+
+export async function deletePurchase(id: string): Promise<void> {
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  setLocalItem(
+    STORAGE_KEYS.PURCHASES,
+    list.filter((item) => item.id !== id)
+  );
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(deleteDoc(doc(db, 'purchases', id)), 2500).catch((e) =>
+      console.error('Error deleting purchase in Firebase:', e)
+    );
+  }
+}
+
+async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<PurchaseOrder> {
+  // CRITICAL RULE: If stockAdded is already true, NEVER add stock again!
+  if (purchase.stockAdded) {
+    return purchase;
+  }
+
+  if (purchase.status !== 'received' && purchase.status !== 'completed') {
+    return purchase;
+  }
+
+  const materials = await getRawMaterials();
+  for (const item of purchase.items) {
+    const material = materials.find((m) => m.id === item.rawMaterialId);
+    if (material) {
+      const newStock = material.currentStock + item.quantity;
+      await updateRawMaterial(material.id, {
+        currentStock: newStock,
+        lastRestocked: purchase.purchaseDate || new Date().toISOString().split('T')[0]
+      });
+    }
+  }
+
+  const updatedPurchase = { ...purchase, stockAdded: true };
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  const newList = list.map((p) => (p.id === purchase.id ? updatedPurchase : p));
+  setLocalItem(STORAGE_KEYS.PURCHASES, newList);
+
+  if (isLiveFirebaseConfigured && db) {
+    withTimeout(setDoc(doc(db, 'purchases', purchase.id), { stockAdded: true }, { merge: true }), 2500).catch((e) =>
+      console.error('Error updating stockAdded flag in Firebase:', e)
+    );
+  }
+
+  return updatedPurchase;
 }
 
 // ================= FINISHED GOODS LOG =================

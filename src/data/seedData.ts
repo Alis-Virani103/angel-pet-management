@@ -9,7 +9,8 @@ import {
   RawMaterialUsage,
   FinishedGoodsLog,
   DocumentItem,
-  Settings
+  Settings,
+  PurchaseOrder
 } from '../types';
 
 export const initialCustomers: Customer[] = [
@@ -1385,3 +1386,123 @@ export const initialSettings: Settings = {
   defaultPriceCategory: 'A',
   enableNotifications: true
 };
+
+export const initialPurchases: PurchaseOrder[] = [
+  {
+    id: 'PO-10021',
+    purchaseNumber: 'PO-10021',
+    supplierName: 'Reliance Polymers Ltd',
+    supplierPhone: '+91 98250 11223',
+    items: [
+      {
+        rawMaterialId: 'RM-101',
+        rawMaterialName: 'PET Granules Grade A',
+        category: 'granules',
+        unit: 'kg',
+        unitCost: 110.00,
+        quantity: 2000,
+        subtotal: 220000
+      }
+    ],
+    subtotal: 220000,
+    gstRate: 18,
+    gstAmount: 39600,
+    totalAmount: 259600,
+    totalQuantity: 2000,
+    status: 'received',
+    paymentStatus: 'paid',
+    paidAmount: 259600,
+    purchaseDate: '2026-08-05',
+    stockAdded: true,
+    notes: 'Bulk PET resin granules delivery for bottle production',
+    createdAt: '2026-08-05'
+  },
+  {
+    id: 'PO-10022',
+    purchaseNumber: 'PO-10022',
+    supplierName: 'IOCL Polymers',
+    supplierPhone: '+91 98980 44332',
+    items: [
+      {
+        rawMaterialId: 'RM-102',
+        rawMaterialName: 'HDPE Polymer White',
+        category: 'granules',
+        unit: 'kg',
+        unitCost: 125.00,
+        quantity: 1500,
+        subtotal: 187500
+      }
+    ],
+    subtotal: 187500,
+    gstRate: 18,
+    gstAmount: 33750,
+    totalAmount: 221250,
+    totalQuantity: 1500,
+    status: 'pending',
+    paymentStatus: 'partially_paid',
+    paidAmount: 100000,
+    purchaseDate: '2026-08-22',
+    stockAdded: false,
+    notes: 'HDPE resin for blow molding chemical containers',
+    createdAt: '2026-08-22'
+  },
+  {
+    id: 'PO-10023',
+    purchaseNumber: 'PO-10023',
+    supplierName: 'Clariant Pigments',
+    supplierPhone: '+91 97129 88776',
+    items: [
+      {
+        rawMaterialId: 'RM-103',
+        rawMaterialName: 'Blue Masterbatch',
+        category: 'masterbatch',
+        unit: 'kg',
+        unitCost: 280.00,
+        quantity: 250,
+        subtotal: 70000
+      }
+    ],
+    subtotal: 70000,
+    gstRate: 18,
+    gstAmount: 12600,
+    totalAmount: 82600,
+    totalQuantity: 250,
+    status: 'received',
+    paymentStatus: 'paid',
+    paidAmount: 82600,
+    purchaseDate: '2026-08-01',
+    stockAdded: true,
+    notes: 'Blue colorant masterbatch formulation batch',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'PO-10024',
+    purchaseNumber: 'PO-10024',
+    supplierName: 'Surat Packaging Ind',
+    supplierPhone: '+91 94260 55443',
+    items: [
+      {
+        rawMaterialId: 'RM-104',
+        rawMaterialName: 'Standard Carton Boxes (500 Cap)',
+        category: 'packaging',
+        unit: 'boxes',
+        unitCost: 45.00,
+        quantity: 500,
+        subtotal: 22500
+      }
+    ],
+    subtotal: 22500,
+    gstRate: 18,
+    gstAmount: 4050,
+    totalAmount: 26550,
+    totalQuantity: 500,
+    status: 'pending',
+    paymentStatus: 'pending',
+    paidAmount: 0,
+    purchaseDate: '2026-08-28',
+    stockAdded: false,
+    notes: 'Corrugated 5-ply shipping master cartons',
+    createdAt: '2026-08-28'
+  }
+];
+

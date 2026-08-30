@@ -11,14 +11,18 @@ import {
   Trash2
 } from 'lucide-react';
 
+import { ShoppingBag, ArrowRight } from 'lucide-react';
+
 interface RawMaterialsProps {
   onOpenAddRawMaterialModal: (material?: RawMaterial) => void;
   onOpenRecordMaterialUsageModal: () => void;
+  onOpenNewPurchaseModal?: () => void;
 }
 
 export const RawMaterials: React.FC<RawMaterialsProps> = ({
   onOpenAddRawMaterialModal,
-  onOpenRecordMaterialUsageModal
+  onOpenRecordMaterialUsageModal,
+  onOpenNewPurchaseModal
 }) => {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [usageLogs, setUsageLogs] = useState<RawMaterialUsage[]>([]);
@@ -68,13 +72,22 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
       {/* Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Raw Materials</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Raw Materials Inventory</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Plastic granules, color masterbatch, pigment dyes and packaging inventory
+            Stock levels are automatically maintained from Purchases incoming receipts
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenNewPurchaseModal && (
+            <button
+              onClick={onOpenNewPurchaseModal}
+              className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-1.5"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>Record Purchase</span>
+            </button>
+          )}
           <button
             onClick={onOpenRecordMaterialUsageModal}
             className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-colors flex items-center space-x-1.5"
@@ -84,10 +97,10 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
           </button>
           <button
             onClick={() => onOpenAddRawMaterialModal()}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-2"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Raw Material</span>
+            <span>Add Item</span>
           </button>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Layers,
   ShoppingCart,
+  ShoppingBag,
   Boxes,
   Truck,
   IndianRupee,
@@ -28,6 +29,7 @@ interface HeaderProps {
   onOpenRecordPaymentModal?: () => void;
   onOpenNewDispatchModal?: () => void;
   onOpenAddFinishedGoodsModal?: () => void;
+  onOpenNewPurchaseModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,7 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAddCustomerModal,
   onOpenRecordPaymentModal,
   onOpenNewDispatchModal,
-  onOpenAddFinishedGoodsModal
+  onOpenAddFinishedGoodsModal,
+  onOpenNewPurchaseModal
 }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,6 +127,16 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <ShoppingCart className="w-4 h-4 text-blue-600" />
                 <span>New Sales Order</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowQuickActions(false);
+                  onOpenNewPurchaseModal ? onOpenNewPurchaseModal() : navigate('/purchases');
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
+              >
+                <ShoppingBag className="w-4 h-4 text-indigo-600" />
+                <span>New Purchase Entry</span>
               </button>
               <button
                 onClick={() => {

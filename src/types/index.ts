@@ -152,6 +152,39 @@ export interface RawMaterialUsage {
   notes?: string;
 }
 
+export type PurchaseStatus = 'pending' | 'received' | 'completed' | 'cancelled';
+export type PurchasePaymentStatus = 'pending' | 'partially_paid' | 'paid';
+
+export interface PurchaseItem {
+  rawMaterialId: string;
+  rawMaterialName: string;
+  category: RawMaterialCategory;
+  unit: string;
+  unitCost: number;
+  quantity: number;
+  subtotal: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  purchaseNumber: string; // e.g. PO-10021
+  supplierName: string;
+  supplierPhone?: string;
+  items: PurchaseItem[];
+  subtotal: number;
+  gstAmount: number;
+  gstRate: number; // e.g. 18
+  totalAmount: number;
+  totalQuantity: number;
+  status: PurchaseStatus;
+  paymentStatus: PurchasePaymentStatus;
+  paidAmount: number;
+  purchaseDate: string;
+  stockAdded?: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface FinishedGoodsLog {
   id: string;
   productId: string;

@@ -9,6 +9,7 @@ interface AppLayoutProps {
   onOpenRecordPaymentModal?: () => void;
   onOpenNewDispatchModal?: () => void;
   onOpenAddFinishedGoodsModal?: () => void;
+  onOpenNewPurchaseModal?: () => void;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -16,7 +17,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onOpenAddCustomerModal,
   onOpenRecordPaymentModal,
   onOpenNewDispatchModal,
-  onOpenAddFinishedGoodsModal
+  onOpenAddFinishedGoodsModal,
+  onOpenNewPurchaseModal
 }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -47,6 +49,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onOpenRecordPaymentModal={onOpenRecordPaymentModal}
           onOpenNewDispatchModal={onOpenNewDispatchModal}
           onOpenAddFinishedGoodsModal={onOpenAddFinishedGoodsModal}
+          onOpenNewPurchaseModal={onOpenNewPurchaseModal}
         />
 
         {/* Page Container */}

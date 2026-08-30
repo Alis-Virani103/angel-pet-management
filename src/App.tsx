@@ -10,6 +10,8 @@ import { Analytics } from './pages/Analytics';
 import { ProductDirectory } from './pages/ProductDirectory';
 import { FinishedGoods } from './pages/FinishedGoods';
 import { RawMaterials } from './pages/RawMaterials';
+import { Purchases } from './pages/Purchases';
+import { PurchaseDetails } from './pages/PurchaseDetails';
 import { Finance } from './pages/Finance';
 import { DispatchPage } from './pages/Dispatch';
 import { Documents } from './pages/Documents';
@@ -26,6 +28,8 @@ import { AddFinishedGoodsModal } from './components/modals/AddFinishedGoodsModal
 import { AddRawMaterialModal } from './components/modals/AddRawMaterialModal';
 import { RecordMaterialUsageModal } from './components/modals/RecordMaterialUsageModal';
 import { UploadDocumentModal } from './components/modals/UploadDocumentModal';
+import { NewPurchaseModal } from './components/modals/NewPurchaseModal';
+import { RecordPurchasePaymentModal } from './components/modals/RecordPurchasePaymentModal';
 import { ProductType, Customer, Product, RawMaterial } from './types';
 
 export function App() {
@@ -50,6 +54,10 @@ export function App() {
   const [isRecordMaterialUsageOpen, setIsRecordMaterialUsageOpen] = useState(false);
   const [isUploadDocumentOpen, setIsUploadDocumentOpen] = useState(false);
 
+  const [isNewPurchaseOpen, setIsNewPurchaseOpen] = useState(false);
+  const [isRecordPurchasePaymentOpen, setIsRecordPurchasePaymentOpen] = useState(false);
+  const [targetPurchaseIdForPayment, setTargetPurchaseIdForPayment] = useState<string | undefined>(undefined);
+
   // Refresh key to re-trigger component fetches across page navigation
   const [refreshKey, setRefreshKey] = useState(0);
   const triggerRefresh = () => setRefreshKey((prev) => prev + 1);
@@ -57,6 +65,11 @@ export function App() {
   const openRecordPayment = (orderId?: string) => {
     setTargetOrderIdForPayment(orderId);
     setIsRecordPaymentOpen(true);
+  };
+
+  const openRecordPurchasePayment = (purchaseId?: string) => {
+    setTargetPurchaseIdForPayment(purchaseId);
+    setIsRecordPurchasePaymentOpen(true);
   };
 
   const openAddCustomer = (customer?: Customer) => {
@@ -86,6 +99,7 @@ export function App() {
               onOpenRecordPaymentModal={() => openRecordPayment()}
               onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
               onOpenAddFinishedGoodsModal={() => setIsAddFinishedGoodsOpen(true)}
+              onOpenNewPurchaseModal={() => setIsNewPurchaseOpen(true)}
             />
           }
         >
@@ -162,12 +176,32 @@ export function App() {
             }
           />
           <Route
+            path="/purchases"
+            element={
+              <Purchases
+                key={`pur-${refreshKey}`}
+                onOpenNewPurchaseModal={() => setIsNewPurchaseOpen(true)}
+                onOpenRecordPurchasePaymentModal={(id) => openRecordPurchasePayment(id)}
+              />
+            }
+          />
+          <Route
+            path="/purchases/:purchaseId"
+            element={
+              <PurchaseDetails
+                key={`purdt-${refreshKey}`}
+                onOpenRecordPurchasePaymentModal={(id) => openRecordPurchasePayment(id)}
+              />
+            }
+          />
+          <Route
             path="/raw-materials"
             element={
               <RawMaterials
                 key={`rm-${refreshKey}`}
                 onOpenAddRawMaterialModal={(mat) => openAddRawMaterial(mat)}
                 onOpenRecordMaterialUsageModal={() => setIsRecordMaterialUsageOpen(true)}
+                onOpenNewPurchaseModal={() => setIsNewPurchaseOpen(true)}
               />
             }
           />
@@ -267,6 +301,17 @@ export function App() {
         isOpen={isUploadDocumentOpen}
         onClose={() => setIsUploadDocumentOpen(false)}
         onDocumentUploaded={triggerRefresh}
+      />
+      <NewPurchaseModal
+        isOpen={isNewPurchaseOpen}
+        onClose={() => setIsNewPurchaseOpen(false)}
+        onPurchaseCreated={triggerRefresh}
+      />
+      <RecordPurchasePaymentModal
+        isOpen={isRecordPurchasePaymentOpen}
+        onClose={() => setIsRecordPurchasePaymentOpen(false)}
+        defaultPurchaseId={targetPurchaseIdForPayment}
+        onPaymentRecorded={triggerRefresh}
       />
     </Router>
   );
