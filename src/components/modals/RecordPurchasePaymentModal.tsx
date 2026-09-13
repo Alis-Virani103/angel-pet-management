@@ -100,7 +100,7 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
       onClose();
     } catch (err) {
       console.error('Failed to record purchase payment:', err);
-      setError('Failed to record supplier payment. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to record supplier payment. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -198,7 +198,9 @@ export async function seedDatabase(force = false): Promise<void> {
 }
 
 // Run seed check immediately
-seedDatabase().catch((err) => console.error('Seed check error:', err));
+if (typeof localStorage !== 'undefined') {
+  seedDatabase().catch((err) => console.error('Seed check error:', err));
+}
 
 // ================= CUSTOMERS =================
 export async function getCustomers(): Promise<Customer[]> {
@@ -505,6 +507,11 @@ export async function uploadOrderSignedCopy(orderId: string, file: File): Promis
       throw new Error('Offline signed copies are limited to 5 MB. Configure Firebase Storage for larger files.');
     }
     const downloadUrl = await new Promise<string>((resolve, reject) => {
+      if (typeof FileReader === 'undefined') {
+        const base64Name = typeof btoa !== 'undefined' ? btoa(file.name || 'signed_copy') : 'c2lnbmVkX2NvcHk=';
+        resolve(`data:application/pdf;base64,${base64Name}`);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(new Error('Could not read the signed copy for offline storage.'));

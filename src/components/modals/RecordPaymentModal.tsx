@@ -93,7 +93,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       onClose();
     } catch (err) {
       console.error(err);
-      setError('Failed to record payment.');
+      setError(err instanceof Error ? err.message : 'Failed to record payment.');
     } finally {
       setLoading(false);
     }

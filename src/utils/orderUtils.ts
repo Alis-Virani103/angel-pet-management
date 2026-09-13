@@ -12,13 +12,6 @@ export function getOrderQuantity(order: Order): number {
   if (!order.items || order.items.length === 0) {
     return 0;
   }
-  const bottleItem = order.items.find((i) => i.productType === 'bottle');
-  if (bottleItem) {
-    return bottleItem.quantity;
-  }
-  const capItem = order.items.find((i) => i.productType === 'cap');
-  if (capItem) {
-    return capItem.quantity;
-  }
-  return Math.max(...order.items.map((i) => i.quantity || 0), 0);
+  return order.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
 }
+

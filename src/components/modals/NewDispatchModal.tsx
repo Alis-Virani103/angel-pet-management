@@ -83,7 +83,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
       onClose();
     } catch (err) {
       console.error(err);
-      setError('Failed to create dispatch record.');
+      setError(err instanceof Error ? err.message : 'Failed to create dispatch record.');
     } finally {
       setLoading(false);
     }
