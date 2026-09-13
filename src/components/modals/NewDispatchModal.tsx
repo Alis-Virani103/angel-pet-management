@@ -8,12 +8,14 @@ interface NewDispatchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDispatchCreated?: () => void;
+  defaultOrderId?: string;
 }
 
 export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
   isOpen,
   onClose,
-  onDispatchCreated
+  onDispatchCreated,
+  defaultOrderId
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
@@ -36,12 +38,9 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
     try {
       const orderList = await getOrders();
       setOrders(orderList);
-      const pendingDispatchOrders = orderList.filter((o) => o.orderStatus !== 'completed' && o.orderStatus !== 'cancelled');
-      if (pendingDispatchOrders.length > 0) {
-        setSelectedOrderId(pendingDispatchOrders[0].id);
-      } else if (orderList.length > 0) {
-        setSelectedOrderId(orderList[0].id);
-      }
+      const dispatchableOrders = orderList.filter((o) => o.orderStatus !== 'completed' && o.orderStatus !== 'cancelled');
+      const defaultOrder = dispatchableOrders.find((order) => order.id === defaultOrderId);
+      setSelectedOrderId(defaultOrder?.id || dispatchableOrders[0]?.id || '');
     } catch (e) {
       console.error(e);
     }
@@ -53,6 +52,10 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
     e.preventDefault();
     if (!selectedOrder) {
       setError('Please select an order to dispatch.');
+      return;
+    }
+    if (selectedOrder.orderStatus === 'cancelled') {
+      setError('Cancelled orders cannot be dispatched.');
       return;
     }
 

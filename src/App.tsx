@@ -46,6 +46,7 @@ export function App() {
   const [targetOrderIdForPayment, setTargetOrderIdForPayment] = useState<string | undefined>(undefined);
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isNewDispatchOpen, setIsNewDispatchOpen] = useState(false);
+  const [targetOrderIdForDispatch, setTargetOrderIdForDispatch] = useState<string | undefined>(undefined);
   const [isAddFinishedGoodsOpen, setIsAddFinishedGoodsOpen] = useState(false);
 
   const [isAddRawMaterialOpen, setIsAddRawMaterialOpen] = useState(false);
@@ -70,6 +71,11 @@ export function App() {
   const openRecordPurchasePayment = (purchaseId?: string) => {
     setTargetPurchaseIdForPayment(purchaseId);
     setIsRecordPurchasePaymentOpen(true);
+  };
+
+  const openNewDispatch = (orderId?: string) => {
+    setTargetOrderIdForDispatch(orderId);
+    setIsNewDispatchOpen(true);
   };
 
   const openAddCustomer = (customer?: Customer) => {
@@ -97,7 +103,7 @@ export function App() {
               onOpenNewOrderModal={() => setIsNewOrderOpen(true)}
               onOpenAddCustomerModal={() => openAddCustomer()}
               onOpenRecordPaymentModal={() => openRecordPayment()}
-              onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
+              onOpenNewDispatchModal={() => openNewDispatch()}
               onOpenAddFinishedGoodsModal={() => setIsAddFinishedGoodsOpen(true)}
               onOpenNewPurchaseModal={() => setIsNewPurchaseOpen(true)}
             />
@@ -111,7 +117,7 @@ export function App() {
                 onOpenNewOrderModal={() => setIsNewOrderOpen(true)}
                 onOpenAddCustomerModal={() => openAddCustomer()}
                 onOpenRecordPaymentModal={() => openRecordPayment()}
-                onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
+                onOpenNewDispatchModal={() => openNewDispatch()}
                 onOpenAddFinishedGoodsModal={() => setIsAddFinishedGoodsOpen(true)}
               />
             }
@@ -123,7 +129,7 @@ export function App() {
                 key={`sales-${refreshKey}`}
                 onOpenNewOrderModal={() => setIsNewOrderOpen(true)}
                 onOpenRecordPaymentModal={(id) => openRecordPayment(id)}
-                onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
+                onOpenNewDispatchModal={(id) => openNewDispatch(id)}
               />
             }
           />
@@ -133,7 +139,7 @@ export function App() {
               <OrderDetails
                 key={`ord-${refreshKey}`}
                 onOpenRecordPaymentModal={(id) => openRecordPayment(id)}
-                onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
+                onOpenNewDispatchModal={(id) => openNewDispatch(id)}
               />
             }
           />
@@ -220,7 +226,7 @@ export function App() {
             element={
               <DispatchPage
                 key={`disp-${refreshKey}`}
-                onOpenNewDispatchModal={() => setIsNewDispatchOpen(true)}
+                onOpenNewDispatchModal={() => openNewDispatch()}
               />
             }
           />
@@ -275,7 +281,11 @@ export function App() {
       />
       <NewDispatchModal
         isOpen={isNewDispatchOpen}
-        onClose={() => setIsNewDispatchOpen(false)}
+        onClose={() => {
+          setIsNewDispatchOpen(false);
+          setTargetOrderIdForDispatch(undefined);
+        }}
+        defaultOrderId={targetOrderIdForDispatch}
         onDispatchCreated={triggerRefresh}
       />
       <AddFinishedGoodsModal

@@ -90,6 +90,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setError('Product name is required.');
       return;
     }
+    if ([priceA, priceB, priceC, currentStock, minimumStock].some((value) => !Number.isFinite(value) || value < 0)) {
+      setError('Prices and stock values must be valid non-negative numbers.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -109,7 +113,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setUploadStatusText('Saving product data...');
 
       if (initialProduct) {
-        await updateProduct(initialProduct.id, {
+        const updates = {
           name: name.trim(),
           sku: sku.trim() || initialProduct.sku,
           type,
@@ -121,10 +125,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           currentStock: Number(currentStock),
           minimumStock: Number(minimumStock),
           unit,
-          status,
-          imageUrl: finalImageUrl,
-          cloudinaryPublicId: finalPublicId
-        });
+          status
+        } as Partial<Product>;
+        if (imageFile) {
+          updates.imageUrl = finalImageUrl;
+          updates.cloudinaryPublicId = finalPublicId;
+        }
+        await updateProduct(initialProduct.id, updates);
       } else {
         await addProduct({
           name: name.trim(),
@@ -147,8 +154,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       if (onProductAdded) onProductAdded();
       onClose();
     } catch (err) {
-      console.error(err);
-      setError(initialProduct ? 'Failed to update product.' : 'Failed to add product.');
+      console.error('Product save failed:', err);
+      const detail = err instanceof Error ? ` ${err.message}` : '';
+      setError(`${initialProduct ? 'Failed to update product.' : 'Failed to add product.'}${detail}`);
     } finally {
       setLoading(false);
       setUploadStatusText('');

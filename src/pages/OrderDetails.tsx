@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Order } from '../types';
-import { getOrders, updateOrder } from '../services/db';
+import { getOrders, uploadOrderSignedCopy, removeOrderSignedCopy } from '../services/db';
 import { Badge } from '../components/common/Badge';
-import { Modal } from '../components/common/Modal';
+import { EditOrderItemsModal } from '../components/modals/EditOrderItemsModal';
 import {
   ArrowLeft,
   Printer,
@@ -15,11 +15,16 @@ import {
   Calendar,
   CheckCircle,
   FileText
+  , UploadCloud
+  , Download
+  , Trash2
+  , Loader2
+  , AlertCircle
 } from 'lucide-react';
 
 interface OrderDetailsProps {
   onOpenRecordPaymentModal: (orderId?: string) => void;
-  onOpenNewDispatchModal: () => void;
+  onOpenNewDispatchModal: (orderId?: string) => void;
 }
 
 export const OrderDetails: React.FC<OrderDetailsProps> = ({
@@ -31,7 +36,9 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [notes, setNotes] = useState('');
+  const [signedCopyFile, setSignedCopyFile] = useState<File | null>(null);
+  const [signedCopyLoading, setSignedCopyLoading] = useState(false);
+  const [signedCopyError, setSignedCopyError] = useState('');
 
   useEffect(() => {
     loadOrder();
@@ -44,7 +51,6 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
       const found = list.find((o) => o.id === orderId || o.orderNumber === orderId);
       if (found) {
         setOrder(found);
-        setNotes(found.notes || '');
       }
     } catch (e) {
       console.error(e);
@@ -53,14 +59,48 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
     }
   };
 
-  const handleSaveNotes = async () => {
-    if (!order) return;
+  const handleSignedCopySelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!orderId) return;
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!supportedTypes.includes(file.type)) {
+      setSignedCopyError('Unsupported file type. Upload a PDF, JPG, JPEG, PNG, or WebP file.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setSignedCopyError('The signed copy must be smaller than 20 MB.');
+      return;
+    }
+
+    setSignedCopyFile(file);
+    setSignedCopyError('');
+    setSignedCopyLoading(true);
     try {
-      await updateOrder(order.id, { notes });
-      setOrder({ ...order, notes });
-      setIsEditModalOpen(false);
-    } catch (e) {
-      console.error(e);
+      const updated = await uploadOrderSignedCopy(orderId, file);
+      setOrder(updated);
+      setSignedCopyFile(null);
+    } catch (error) {
+      console.error('Signed copy upload failed:', error);
+      setSignedCopyError(error instanceof Error ? error.message : 'Failed to upload the signed copy.');
+    } finally {
+      setSignedCopyLoading(false);
+    }
+  };
+
+  const handleRemoveSignedCopy = async () => {
+    if (!order || !order.signedCopy || !window.confirm('Remove the signed copy from this sales order?')) return;
+    setSignedCopyLoading(true);
+    setSignedCopyError('');
+    try {
+      const updated = await removeOrderSignedCopy(order.id);
+      setOrder(updated);
+    } catch (error) {
+      console.error('Signed copy removal failed:', error);
+      setSignedCopyError(error instanceof Error ? error.message : 'Failed to remove the signed copy.');
+    } finally {
+      setSignedCopyLoading(false);
     }
   };
 
@@ -127,9 +167,9 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               <span>Record Payment</span>
             </button>
           )}
-          {order.orderStatus !== 'completed' && (
+          {order.orderStatus !== 'completed' && order.orderStatus !== 'cancelled' && (
             <button
-              onClick={onOpenNewDispatchModal}
+              onClick={() => onOpenNewDispatchModal(order.id)}
               className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl transition-colors shadow-sm shadow-sky-500/20 flex items-center space-x-1.5"
             >
               <Truck className="w-3.5 h-3.5" />
@@ -197,6 +237,51 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         </div>
       </div>
 
+      {/* Party Signed Copy */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`p-2.5 rounded-xl ${order.signedCopy ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+              {order.signedCopy ? <FileText className="w-5 h-5" /> : <UploadCloud className="w-5 h-5" />}
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Party Signed Copy</h2>
+              <p className={`text-xs font-medium mt-1 ${order.signedCopy ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {order.signedCopy ? 'Uploaded' : 'Not Uploaded'}
+              </p>
+              {order.signedCopy && <p className="text-[11px] text-slate-400 mt-1 truncate max-w-[280px]">{order.signedCopy.fileName}</p>}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {order.signedCopy && (
+              <>
+                <a href={order.signedCopy.downloadUrl} target="_blank" rel="noreferrer" className="px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 inline-flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" /> View
+                </a>
+                <a href={order.signedCopy.downloadUrl} download={order.signedCopy.fileName} className="px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 inline-flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Download
+                </a>
+                <button type="button" onClick={handleRemoveSignedCopy} disabled={signedCopyLoading} className="p-2 text-rose-600 border border-rose-100 rounded-xl hover:bg-rose-50 disabled:opacity-50" title="Remove signed copy" aria-label="Remove signed copy">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <label className={`px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 cursor-pointer ${signedCopyLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+              {signedCopyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+              {signedCopyLoading ? 'Uploading...' : order.signedCopy ? 'Replace Copy' : 'Upload Signed Copy'}
+              <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={handleSignedCopySelected} disabled={signedCopyLoading} className="hidden" />
+            </label>
+          </div>
+        </div>
+        {signedCopyError && (
+          <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{signedCopyError}</span>
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 mt-3">Accepted: PDF, JPG, JPEG, PNG, or WebP up to 20 MB.</p>
+      </div>
+
       {/* Items Breakdown Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-4">
         <h2 className="text-base font-bold text-slate-900">Order Items Specification</h2>
@@ -252,40 +337,12 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
         </div>
       </div>
 
-      {/* Edit Order Modal */}
-      <Modal
+      <EditOrderItemsModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={`Edit ${order.orderNumber}`}
-        subtitle="Update order notes or details"
-        maxWidth="md"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Order Notes</label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
-            <button
-              onClick={() => setIsEditModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveNotes}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700"
-            >
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </Modal>
+        order={order}
+        onSaved={setOrder}
+      />
     </div>
   );
 };

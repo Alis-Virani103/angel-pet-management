@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-import { Customer, Product, PriceCategory } from '../../types';
-import { getCustomers, getProducts, addOrder, addCustomer } from '../../services/db';
+import { Customer, Product, Order, OrderItem, PriceCategory } from '../../types';
+import { getCustomers, getProducts, getOrders, addOrder, addCustomer } from '../../services/db';
 import { ShoppingCart, Check, Plus, AlertCircle } from 'lucide-react';
 
 interface NewOrderModalProps {
@@ -10,6 +10,20 @@ interface NewOrderModalProps {
   onOrderCreated?: () => void;
 }
 
+interface DraftOrderItem {
+  id: string;
+  productId: string;
+  quantity: number | '';
+  rate: string;
+}
+
+const createDraftItem = (productId = '', id = `line-${Date.now()}-${Math.random()}`): DraftOrderItem => ({
+  id,
+  productId,
+  quantity: 1000,
+  rate: ''
+});
+
 export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   isOpen,
   onClose,
@@ -17,14 +31,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [previousOrders, setPreviousOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Form states
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [selectedBottleId, setSelectedBottleId] = useState('');
-  const [selectedCapId, setSelectedCapId] = useState('');
-  const [quantity, setQuantity] = useState<number>(1000);
+  const [items, setItems] = useState<DraftOrderItem[]>([createDraftItem()]);
   const [priceCategory, setPriceCategory] = useState<PriceCategory>('A');
   const [includeGst, setIncludeGst] = useState(true);
   const [notes, setNotes] = useState('');
@@ -43,10 +56,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
   const loadData = async () => {
     try {
-      const [cusList, prdList] = await Promise.all([getCustomers(), getProducts()]);
+      const [cusList, prdList, orderList] = await Promise.all([getCustomers(), getProducts(), getOrders()]);
       const activeCustomers = cusList.filter((c) => c.status === 'active');
       setCustomers(activeCustomers);
       setProducts(prdList);
+      setPreviousOrders(orderList);
 
       if (activeCustomers.length > 0 && (!selectedCustomerId || !activeCustomers.some((c) => c.id === selectedCustomerId))) {
         setSelectedCustomerId(activeCustomers[0].id);
@@ -55,10 +69,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         setSelectedCustomerId('');
       }
 
-      const bottles = prdList.filter((p) => p.type === 'bottle');
-      const caps = prdList.filter((p) => p.type === 'cap');
-      if (bottles.length > 0 && !selectedBottleId) setSelectedBottleId(bottles[0].id);
-      if (caps.length > 0 && !selectedCapId) setSelectedCapId(caps[0].id);
+      setItems((currentItems) => currentItems.map((item, index) => (
+        item.productId || index > 0 ? item : { ...item, productId: prdList[0]?.id || '' }
+      )));
     } catch (e) {
       console.error(e);
     }
@@ -72,34 +85,74 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     }
   };
 
-  const bottle = products.find((p) => p.id === selectedBottleId);
-  const cap = products.find((p) => p.id === selectedCapId);
-
-  const getPriceForTier = (product: Product | undefined, tier: PriceCategory): number => {
-    if (!product) return 0;
-    if (tier === 'A') return product.priceA;
-    if (tier === 'B') return product.priceB;
-    return product.priceC;
+  const getPreviousRate = (customerId: string, productId: string): number | null => {
+    if (!customerId || !productId) return null;
+    const matchingItems = previousOrders
+      .filter((order) => order.customerId === customerId && order.orderStatus !== 'cancelled')
+      .sort((first, second) => second.orderDate.localeCompare(first.orderDate))
+      .flatMap((order) => order.items.filter((item) => item.productId === productId));
+    return matchingItems[0]?.unitPrice ?? null;
   };
 
-  const bottlePrice = getPriceForTier(bottle, priceCategory);
-  const capPrice = getPriceForTier(cap, priceCategory);
-  const itemUnitPrice = bottlePrice + capPrice;
-  const subtotal = itemUnitPrice * (quantity || 0);
+  const normalizeRateInput = (value: string): string => {
+    const sanitized = value.replace(/[^\d.]/g, '');
+    const [wholePart, ...decimalParts] = sanitized.split('.');
+    const decimalPart = decimalParts.join('');
+    const normalizedWholePart = wholePart.replace(/^0+(?=\d)/, '');
+    return decimalParts.length > 0 ? `${normalizedWholePart}.${decimalPart}` : normalizedWholePart;
+  };
+
+  const orderItems = items
+    .map((item) => {
+      const product = products.find((candidate) => candidate.id === item.productId);
+      const quantity = item.quantity === '' ? 0 : item.quantity;
+      const unitPrice = item.rate === '' ? 0 : Number(item.rate);
+      if (!product) return null;
+      return {
+        productId: product.id,
+        productName: product.name,
+        productType: product.type,
+        priceCategory,
+        unitPrice,
+        quantity,
+        subtotal: unitPrice * quantity
+      } satisfies OrderItem;
+    })
+    .filter((item): item is OrderItem => item !== null);
+  const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
   const gstAmount = includeGst ? subtotal * 0.18 : 0;
   const grandTotal = subtotal + gstAmount;
+
+  const updateItem = (id: string, updates: Partial<DraftOrderItem>) => {
+    setItems((currentItems) => currentItems.map((item) => item.id === id ? { ...item, ...updates } : item));
+  };
+
+  const handleQuantityChange = (id: string, value: string) => {
+    const digitsOnly = value.replace(/\D/g, '');
+    const normalizedValue = digitsOnly.replace(/^0+(?=\d)/, '');
+    updateItem(id, { quantity: normalizedValue ? Number(normalizedValue) : '' });
+  };
+
+  const handleRateChange = (id: string, value: string) => {
+    updateItem(id, { rate: normalizeRateInput(value) });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (quantity <= 0) {
-      setError('Please enter a valid order quantity greater than 0.');
+    if (orderItems.length === 0 || items.some((item) => !item.productId)) {
+      setError('Please select a product for every order item.');
       return;
     }
 
-    if (!selectedBottleId && !selectedCapId) {
-      setError('Please select at least one bottle or cap product.');
+    if (items.some((item) => item.quantity === '' || item.quantity <= 0)) {
+      setError('Please enter a valid positive whole quantity for every item.');
+      return;
+    }
+
+    if (items.some((item) => !item.rate || !Number.isFinite(Number(item.rate)) || Number(item.rate) <= 0)) {
+      setError('Please enter a valid positive rate for every item.');
       return;
     }
 
@@ -135,40 +188,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         }
       }
 
-      const items = [];
-      if (bottle) {
-        items.push({
-          productId: bottle.id,
-          productName: bottle.name,
-          productType: 'bottle' as const,
-          priceCategory,
-          unitPrice: bottlePrice,
-          quantity,
-          subtotal: bottlePrice * quantity
-        });
-      }
-      if (cap) {
-        items.push({
-          productId: cap.id,
-          productName: cap.name,
-          productType: 'cap' as const,
-          priceCategory,
-          unitPrice: capPrice,
-          quantity,
-          subtotal: capPrice * quantity
-        });
-      }
-
       await addOrder({
         customerId: finalCustomerId,
         customerName: finalCustomerName,
         companyName: finalCompanyName,
-        items,
+        items: orderItems,
         subtotal,
         gstAmount,
         gstRate: includeGst ? 18 : 0,
         totalAmount: grandTotal,
-        totalQuantity: quantity,
+        totalQuantity: orderItems.reduce((sum, item) => sum + item.quantity, 0),
         notes
       });
 
@@ -182,15 +211,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     }
   };
 
-  const bottles = products.filter((p) => p.type === 'bottle');
-  const caps = products.filter((p) => p.type === 'cap');
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Create New Sales Order"
-      subtitle="Select customer, bottle & cap specs, and pricing tier"
+      subtitle="Build one order with any combination of products"
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -226,7 +252,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               >
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.company} ({c.name}) — Tier {c.priceCategory}
+                    {c.name} — {c.company} — Tier {c.priceCategory}
                   </option>
                 ))}
               </select>
@@ -269,50 +295,92 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           )}
         </div>
 
-        {/* Product Spec Selection */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Bottle Type</label>
-            <select
-              value={selectedBottleId}
-              onChange={(e) => setSelectedBottleId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+        {/* Multi-item Order Builder */}
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Order Items</h2>
+              <p className="text-[11px] text-slate-500 mt-1">Add bottles, caps, or any combination of products.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setItems((currentItems) => [...currentItems, createDraftItem()])}
+              className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5"
             >
-              <option value="">None</option>
-              {bottles.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} (Stock: {b.currentStock.toLocaleString()})
-                </option>
-              ))}
-            </select>
+              <Plus className="w-3.5 h-3.5" />
+              Add Item
+            </button>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cap Type</label>
-            <select
-              value={selectedCapId}
-              onChange={(e) => setSelectedCapId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="">None</option>
-              {caps.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} (Stock: {c.currentStock.toLocaleString()})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Order Quantity (Units)</label>
-            <input
-              type="number"
-              min={1}
-              required
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
+          <div className="space-y-2">
+            {items.map((item, index) => {
+              const product = products.find((candidate) => candidate.id === item.productId);
+              const unitPrice = item.rate === '' ? 0 : Number(item.rate);
+              const previousRate = getPreviousRate(selectedCustomerId, item.productId);
+              const itemQuantity = item.quantity === '' ? 0 : item.quantity;
+              return (
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_90px_110px_110px_minmax(140px,1fr)_auto] gap-2 items-end p-3 bg-white rounded-xl border border-slate-200">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product {index + 1}</label>
+                    <select
+                      value={item.productId}
+                      onChange={(e) => updateItem(item.id, { productId: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Select product</option>
+                      {products.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.name} ({candidate.type === 'bottle' ? 'Bottle' : 'Cap'}) - Stock: {candidate.currentStock.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Type</label>
+                    <div className="px-3 py-2 bg-slate-100 text-xs font-semibold text-slate-600 rounded-xl min-h-[34px]">
+                      {product ? (product.type === 'bottle' ? 'Bottle' : 'Cap') : '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quantity</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      required
+                      value={item.quantity === '' ? '' : String(item.quantity)}
+                      onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Enter rate"
+                      required
+                      value={item.rate}
+                      onChange={(e) => handleRateChange(item.id, e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <div className="text-[10px] text-slate-500 mt-1">Line Subtotal: ₹{(unitPrice * itemQuantity).toFixed(2)}</div>
+                    <div className="text-[10px] font-semibold text-amber-700 mt-0.5">
+                      Previous Rate: {previousRate === null ? 'No previous rate' : `₹${previousRate.toFixed(2)}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Remove product ${index + 1}`}
+                    disabled={items.length === 1}
+                    onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
+                    className="px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -327,8 +395,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               { key: 'B' as PriceCategory, label: 'Category B (Wholesale)', desc: 'Discounted wholesale rate' },
               { key: 'C' as PriceCategory, label: 'Category C (Special)', desc: 'Special volume contract rate' }
             ].map((tier) => {
-              const bP = getPriceForTier(bottle, tier.key);
-              const cP = getPriceForTier(cap, tier.key);
               const selected = priceCategory === tier.key;
 
               return (
@@ -347,7 +413,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-500">{tier.desc}</p>
                   <div className="mt-2 text-xs font-semibold text-slate-800">
-                    Bottle: ₹{bP.toFixed(2)} | Cap: ₹{cP.toFixed(2)}
+                    {orderItems.length} item{orderItems.length === 1 ? '' : 's'} use this category's product prices
                   </div>
                 </div>
               );
@@ -358,12 +424,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         {/* Order Summary Calculation */}
         <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
           <div className="flex justify-between text-xs text-slate-400">
-            <span>Bottle Subtotal:</span>
-            <span>₹{(bottlePrice * quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>Cap Subtotal:</span>
-            <span>₹{(capPrice * quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            <span>Items:</span>
+            <span>{orderItems.length}</span>
           </div>
           <div className="flex justify-between text-xs text-slate-300 font-medium pt-1 border-t border-slate-800">
             <span>Subtotal (Excl. Tax):</span>

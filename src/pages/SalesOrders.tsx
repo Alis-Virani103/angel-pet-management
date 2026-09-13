@@ -14,13 +14,14 @@ import {
   CheckCircle,
   Clock,
   ArrowUpDown,
-  FileSpreadsheet
+  FileSpreadsheet,
+  XCircle
 } from 'lucide-react';
 
 interface SalesOrdersProps {
   onOpenNewOrderModal: () => void;
   onOpenRecordPaymentModal: (orderId?: string) => void;
-  onOpenNewDispatchModal: () => void;
+  onOpenNewDispatchModal: (orderId?: string) => void;
 }
 
 export const SalesOrders: React.FC<SalesOrdersProps> = ({
@@ -154,6 +155,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               <option value="confirmed">Confirmed</option>
               <option value="dispatched">Dispatched</option>
               <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </div>
 
@@ -193,10 +195,9 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3.5 px-4">Order ID</th>
                 <th className="py-3.5 px-4">Date</th>
                 <th className="py-3.5 px-4">Customer</th>
-                <th className="py-3.5 px-4">Bottle & Cap Spec</th>
+                <th className="py-3.5 px-4">Items</th>
                 <th className="py-3.5 px-4">Qty</th>
                 <th className="py-3.5 px-4">Total Amount</th>
                 <th className="py-3.5 px-4">Payment</th>
@@ -207,23 +208,16 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {sortedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                     No orders match your filter criteria.
                   </td>
                 </tr>
               ) : (
                 sortedOrders.map((order) => {
-                  const bottleItem = order.items.find((i) => i.productType === 'bottle');
-                  const capItem = order.items.find((i) => i.productType === 'cap');
                   const totalQty = getOrderQuantity(order);
 
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-4 font-bold">
-                        <Link to={`/sales/${order.id}`} className="text-blue-600 hover:underline">
-                          {order.orderNumber}
-                        </Link>
-                      </td>
                       <td className="py-3.5 px-4 text-slate-500">{order.orderDate}</td>
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-900">{order.companyName}</div>
@@ -231,10 +225,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-medium text-slate-800">
-                          {bottleItem ? bottleItem.productName : 'No Bottle'}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          {capItem ? `+ ${capItem.productName}` : 'No Cap'}
+                          {order.items.map((item) => item.productName).join(', ') || 'No Items'}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-semibold">{totalQty.toLocaleString()}</td>
@@ -265,13 +256,23 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                               <IndianRupee className="w-4 h-4" />
                             </button>
                           )}
-                          {order.orderStatus !== 'completed' && order.orderStatus !== 'dispatched' && (
+                          {order.orderStatus !== 'completed' && order.orderStatus !== 'dispatched' && order.orderStatus !== 'cancelled' && (
                             <button
-                              onClick={onOpenNewDispatchModal}
+                              onClick={() => onOpenNewDispatchModal(order.id)}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-50 transition-colors"
                               title="Create Dispatch"
                             >
                               <Truck className="w-4 h-4" />
+                            </button>
+                          )}
+                          {(order.orderStatus === 'pending' || order.orderStatus === 'confirmed') && (
+                            <button
+                              onClick={() => handleUpdateStatus(order.id, 'cancelled')}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Cancel Order"
+                              aria-label={`Cancel ${order.orderNumber}`}
+                            >
+                              <XCircle className="w-4 h-4" />
                             </button>
                           )}
                         </div>

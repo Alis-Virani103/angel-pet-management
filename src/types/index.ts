@@ -56,6 +56,15 @@ export interface OrderItem {
   subtotal: number;
 }
 
+export interface SignedOrderCopy {
+  downloadUrl: string;
+  storagePath: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  uploadedAt: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string; // e.g. ORD-10492
@@ -72,6 +81,7 @@ export interface Order {
   paymentStatus: PaymentStatus;
   paidAmount: number;
   orderDate: string;
+  signedCopy?: SignedOrderCopy;
   notes?: string;
 }
 
@@ -155,14 +165,27 @@ export interface RawMaterialUsage {
 export type PurchaseStatus = 'pending' | 'received' | 'completed' | 'cancelled';
 export type PurchasePaymentStatus = 'pending' | 'partially_paid' | 'paid';
 
+export interface PurchasePayment {
+  id: string;
+  purchaseId: string;
+  purchaseNumber: string;
+  supplierName: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod?: PaymentMethod;
+  notes?: string;
+}
+
 export interface PurchaseItem {
   rawMaterialId: string;
   rawMaterialName: string;
+  hsnSac?: string;
   category: RawMaterialCategory;
   unit: string;
   unitCost: number;
   quantity: number;
   subtotal: number;
+  taxRate?: number;
 }
 
 export interface PurchaseOrder {
@@ -179,6 +202,7 @@ export interface PurchaseOrder {
   status: PurchaseStatus;
   paymentStatus: PurchasePaymentStatus;
   paidAmount: number;
+  paymentRecords?: PurchasePayment[];
   purchaseDate: string;
   stockAdded?: boolean;
   notes?: string;

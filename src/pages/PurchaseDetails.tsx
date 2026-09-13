@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PurchaseOrder } from '../types';
 import { getPurchases, updatePurchaseStatus } from '../services/db';
 import { Badge } from '../components/common/Badge';
+import { EditPurchaseItemsModal } from '../components/modals/EditPurchaseItemsModal';
 import {
   ArrowLeft,
   Building2,
@@ -27,6 +28,7 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
   const navigate = useNavigate();
   const [purchase, setPurchase] = useState<PurchaseOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (purchaseId) {
@@ -114,6 +116,13 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
           >
             <Printer className="w-4 h-4" />
             <span>Print PO</span>
+          </button>
+
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="px-3.5 py-2 bg-slate-900 text-white font-semibold text-xs rounded-xl hover:bg-slate-800 transition-colors"
+          >
+            Edit Bill
           </button>
 
           {!purchase.stockAdded && (
@@ -220,22 +229,30 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50/60 border-b border-slate-100 font-bold text-slate-400 uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Material Name</th>
+                    <th className="py-3 px-4">Sr. No.</th>
+                    <th className="py-3 px-4">Product</th>
+                    <th className="py-3 px-4">HSN/SAC</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Quantity</th>
-                    <th className="py-3 px-4">Unit Cost</th>
+                    <th className="py-3 px-4">Unit</th>
+                    <th className="py-3 px-4">Rate</th>
+                    <th className="py-3 px-4">Tax</th>
                     <th className="py-3 px-4 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {purchase.items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="py-3.5 px-4">{idx + 1}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">{item.rawMaterialName}</td>
+                      <td className="py-3.5 px-4">{item.hsnSac || '-'}</td>
                       <td className="py-3.5 px-4 capitalize text-slate-600">{item.category}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {item.quantity.toLocaleString()} {item.unit}
+                        {item.quantity.toLocaleString()}
                       </td>
+                      <td className="py-3.5 px-4">{item.unit}</td>
                       <td className="py-3.5 px-4 text-slate-800">₹{item.unitCost.toFixed(2)}</td>
+                      <td className="py-3.5 px-4">{item.taxRate ?? purchase.gstRate}%</td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900">
                         ₹{item.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
@@ -306,6 +323,50 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="text-base font-bold text-slate-900">Supplier Payment History</h2>
+          <p className="text-xs text-slate-500 mt-1">Recorded supplier payments for this purchase bill.</p>
+        </div>
+        {(purchase.paymentRecords || []).length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-6">Payment Date</th>
+                  <th className="py-3 px-6">Reference</th>
+                  <th className="py-3 px-6">Amount</th>
+                  <th className="py-3 px-6">Payment Method</th>
+                  <th className="py-3 px-6">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                {(purchase.paymentRecords || []).map((payment) => (
+                  <tr key={payment.id}>
+                    <td className="py-3 px-6 text-slate-500">{payment.paymentDate || 'Date unavailable'}</td>
+                    <td className="py-3 px-6 font-semibold text-blue-600">{payment.id}</td>
+                    <td className="py-3 px-6 font-semibold text-emerald-700">₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-3 px-6 text-slate-500">{payment.paymentMethod ? payment.paymentMethod.replace('_', ' ') : 'Not recorded'}</td>
+                    <td className="py-3 px-6 text-slate-500">{payment.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : purchase.paidAmount > 0 ? (
+          <div className="p-6 text-xs text-slate-500">Existing paid amount: ₹{purchase.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Individual payment date and reference were not stored in this historical record.</div>
+        ) : (
+          <div className="p-6 text-xs text-slate-400">No supplier payments recorded yet.</div>
+        )}
+      </div>
+
+      <EditPurchaseItemsModal
+        isOpen={isEditModalOpen}
+        purchase={purchase}
+        onClose={() => setIsEditModalOpen(false)}
+        onSaved={setPurchase}
+      />
     </div>
   );
 };

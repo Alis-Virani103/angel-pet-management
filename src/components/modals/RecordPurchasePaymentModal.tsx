@@ -20,11 +20,16 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
   const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
+      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setNotes('');
+      setError('');
       loadUnpaidPurchases();
     }
   }, [isOpen, defaultPurchaseId]);
@@ -83,9 +88,14 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
       return;
     }
 
+    if (!paymentDate || Number.isNaN(Date.parse(`${paymentDate}T00:00:00`))) {
+      setError('Please select a valid payment date.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await recordPurchasePayment(selectedPurchaseId, paymentAmount);
+      await recordPurchasePayment(selectedPurchaseId, paymentAmount, paymentDate, notes.trim());
       if (onPaymentRecorded) onPaymentRecorded();
       onClose();
     } catch (err) {
@@ -154,6 +164,17 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
             </div>
           </div>
         )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Date</label>
+            <input type="date" required value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="w-full px-3 py-2 bg-slate-50 text-xs rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Reference / Notes</label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Payment reference" className="w-full px-3 py-2 bg-slate-50 text-xs rounded-xl border border-slate-200" />
+          </div>
+        </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Amount (₹)</label>

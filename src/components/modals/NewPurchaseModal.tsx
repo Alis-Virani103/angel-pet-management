@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-import { RawMaterial, RawMaterialCategory, PurchaseStatus } from '../../types';
+import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus } from '../../types';
 import { getRawMaterials, addRawMaterial, addPurchase } from '../../services/db';
 import { ShoppingBag, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -9,6 +9,20 @@ interface NewPurchaseModalProps {
   onClose: () => void;
   onPurchaseCreated?: () => void;
 }
+
+interface DraftPurchaseItem {
+  id: string;
+  rawMaterialId: string;
+  quantity: string;
+  unitCost: string;
+}
+
+const createDraftItem = (rawMaterialId = ''): DraftPurchaseItem => ({
+  id: `line-${Date.now()}-${Math.random()}`,
+  rawMaterialId,
+  quantity: '1000',
+  unitCost: ''
+});
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   isOpen,
@@ -20,9 +34,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   const [error, setError] = useState('');
 
   // Form state
-  const [selectedMaterialId, setSelectedMaterialId] = useState('');
-  const [quantity, setQuantity] = useState<number>(1000);
-  const [unitCost, setUnitCost] = useState<number>(0);
+  const [items, setItems] = useState<DraftPurchaseItem[]>([createDraftItem()]);
   const [supplierName, setSupplierName] = useState('');
   const [supplierPhone, setSupplierPhone] = useState('');
   const [status, setStatus] = useState<PurchaseStatus>('received');
@@ -49,31 +61,46 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       setMaterials(matList);
 
       if (matList.length > 0) {
-        if (!selectedMaterialId || !matList.some((m) => m.id === selectedMaterialId)) {
-          setSelectedMaterialId(matList[0].id);
-          setUnitCost(matList[0].unitCost);
-          setSupplierName(matList[0].supplier || '');
-        }
+        setItems((currentItems) => currentItems.map((item, index) => (
+          item.rawMaterialId || index > 0
+            ? item
+            : { ...item, rawMaterialId: matList[0].id, unitCost: String(matList[0].unitCost) }
+        )));
+        setSupplierName((currentSupplier) => currentSupplier || matList[0].supplier || '');
       }
     } catch (e) {
       console.error('Error loading raw materials:', e);
     }
   };
 
-  const handleMaterialChange = (matId: string) => {
-    setSelectedMaterialId(matId);
-    const mat = materials.find((m) => m.id === matId);
-    if (mat) {
-      setUnitCost(mat.unitCost);
-      if (mat.supplier && !supplierName) {
-        setSupplierName(mat.supplier);
-      }
-    }
+  const updateItem = (id: string, updates: Partial<DraftPurchaseItem>) => {
+    setItems((currentItems) => currentItems.map((item) => item.id === id ? { ...item, ...updates } : item));
   };
 
-  const selectedMaterial = materials.find((m) => m.id === selectedMaterialId);
-  const effectiveUnitCost = unitCost || (selectedMaterial ? selectedMaterial.unitCost : 0);
-  const subtotal = (quantity || 0) * (effectiveUnitCost || 0);
+  const handleMaterialChange = (id: string, materialId: string) => {
+    const material = materials.find((candidate) => candidate.id === materialId);
+    updateItem(id, { rawMaterialId: materialId, unitCost: material ? String(material.unitCost) : '' });
+    if (material?.supplier && !supplierName) setSupplierName(material.supplier);
+  };
+
+  const selectedMaterial = materials.find((m) => m.id === items[0]?.rawMaterialId);
+  const purchaseItems = items.map((item): PurchaseItem => {
+    const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
+    const quantity = Number(item.quantity) || 0;
+    const unitCost = Number(item.unitCost) || 0;
+    return {
+      rawMaterialId: item.rawMaterialId,
+      rawMaterialName: material?.name || '',
+      hsnSac: material?.code || '',
+      category: material?.category || 'granules',
+      unit: material?.unit || newMaterialUnit,
+      unitCost,
+      quantity,
+      subtotal: quantity * unitCost
+      ,taxRate: includeGst ? 18 : 0
+    };
+  });
+  const subtotal = purchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
   const gstAmount = includeGst ? subtotal * 0.18 : 0;
   const grandTotal = subtotal + gstAmount;
 
@@ -81,23 +108,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (quantity <= 0) {
-      setError('Please enter a valid purchase quantity greater than 0.');
+    if (items.length === 0 || items.some((item) => !item.rawMaterialId)) {
+      setError('Please select a material for every bill item.');
       return;
     }
 
-    if (effectiveUnitCost <= 0) {
-      setError('Please enter a valid unit cost greater than 0.');
+    if (items.some((item) => Number(item.quantity) <= 0 || Number(item.unitCost) <= 0)) {
+      setError('Please enter a valid quantity and unit cost for every item.');
       return;
     }
 
     setLoading(true);
     try {
-      let finalMaterialId = selectedMaterialId;
-      let finalMaterialName = selectedMaterial ? selectedMaterial.name : '';
-      let finalCategory: RawMaterialCategory = selectedMaterial ? selectedMaterial.category : 'granules';
-      let finalUnit = selectedMaterial ? selectedMaterial.unit : 'kg';
-
       if (isInlineMaterial) {
         if (!newMaterialName || !newMaterialCode) {
           setError('Please enter the name and code for the new raw material.');
@@ -112,35 +134,28 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           currentStock: 0, // Stock will be added by the purchase order if status is received
           minimumStock: 500,
           unit: newMaterialUnit,
-          unitCost: effectiveUnitCost,
+          unitCost: Number(items[0]?.unitCost) || 0,
           supplier: supplierName || 'Direct Supplier'
         });
-
-        finalMaterialId = createdMaterial.id;
-        finalMaterialName = createdMaterial.name;
-        finalCategory = createdMaterial.category;
-        finalUnit = createdMaterial.unit;
+        setItems((currentItems) => currentItems.map((item, index) => index === 0 ? { ...item, rawMaterialId: createdMaterial.id } : item));
+        purchaseItems[0] = {
+          ...purchaseItems[0],
+          rawMaterialId: createdMaterial.id,
+          rawMaterialName: createdMaterial.name,
+          category: createdMaterial.category,
+          unit: createdMaterial.unit
+        };
       }
 
       await addPurchase({
         supplierName: supplierName || 'Standard Supplier',
         supplierPhone: supplierPhone || '',
-        items: [
-          {
-            rawMaterialId: finalMaterialId,
-            rawMaterialName: finalMaterialName,
-            category: finalCategory,
-            unit: finalUnit,
-            unitCost: effectiveUnitCost,
-            quantity,
-            subtotal
-          }
-        ],
+        items: purchaseItems,
         subtotal,
         gstRate: includeGst ? 18 : 0,
         gstAmount,
         totalAmount: grandTotal,
-        totalQuantity: quantity,
+        totalQuantity: purchaseItems.reduce((sum, item) => sum + item.quantity, 0),
         status,
         purchaseDate,
         notes
@@ -172,37 +187,105 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           </div>
         )}
 
+        <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 space-y-2">
+          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">Supplier Company Name</label>
+          <input
+            type="text"
+            required
+            list="purchase-suppliers"
+            placeholder="Select existing supplier or enter a new supplier"
+            value={supplierName}
+            onChange={(e) => setSupplierName(e.target.value)}
+            className="w-full px-3 py-2.5 bg-white text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+          />
+          <datalist id="purchase-suppliers">
+            {Array.from(new Set(materials.map((material) => material.supplier).filter(Boolean))).map((supplier) => (
+              <option key={supplier} value={supplier} />
+            ))}
+          </datalist>
+          <p className="text-[11px] text-blue-700">This supplier will apply to every material item in this purchase bill.</p>
+        </div>
+
         {/* Raw Material Selection */}
         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Raw Material Item
+              Bill Line Items
             </label>
             <button
               type="button"
-              onClick={() => setIsInlineMaterial(!isInlineMaterial)}
+              onClick={() => setItems((currentItems) => [...currentItems, createDraftItem()])}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
-              {isInlineMaterial ? 'Select Existing Material' : 'Add New Material'}
+              Add Item
             </button>
           </div>
 
-          {!isInlineMaterial ? (
-            <div>
-              <select
-                value={selectedMaterialId}
-                onChange={(e) => handleMaterialChange(e.target.value)}
-                className="w-full px-3 py-2 bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              >
-                {materials.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.code}) — Current Stock: {m.currentStock.toLocaleString()} {m.unit}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
+          <div className="space-y-2">
+            {items.map((item, index) => {
+              const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
+              const line = purchaseItems[index];
+              return (
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_110px_140px_140px_auto] gap-2 items-end p-3 bg-white rounded-xl border border-slate-200">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product / Material {index + 1}</label>
+                    <select
+                      value={item.rawMaterialId}
+                      onChange={(e) => handleMaterialChange(item.id, e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                    >
+                      <option value="">Select material</option>
+                      {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
+                    </select>
+                    <div className="text-[10px] text-slate-400 mt-1">{material ? `Stock: ${material.currentStock.toLocaleString()} ${material.unit}` : 'Select a raw material'}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quantity</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={item.quantity}
+                      onChange={(e) => updateItem(item.id, { quantity: e.target.value.replace(/[^\d.]/g, '') })}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                    />
+                    <div className="text-[10px] text-slate-400 mt-1">Unit: {material?.unit || newMaterialUnit}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate / Unit Cost</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      value={item.unitCost}
+                      onChange={(e) => updateItem(item.id, { unitCost: e.target.value.replace(/[^\d.]/g, '') })}
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div className="text-xs font-semibold text-slate-700 pb-2">Amount: ₹{(line?.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                  <button
+                    type="button"
+                    disabled={items.length === 1}
+                    onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
+                    className="px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsInlineMaterial(!isInlineMaterial)}
+            className="text-xs font-semibold text-slate-500 hover:text-blue-600"
+          >
+            {isInlineMaterial ? 'Use Existing Material' : '+ Add New Material'}
+          </button>
+
+          {isInlineMaterial && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Material Name</label>
@@ -244,36 +327,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         </div>
 
         {/* Purchase Quantities & Pricing */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Purchase Quantity ({selectedMaterial ? selectedMaterial.unit : newMaterialUnit})
-            </label>
-            <input
-              type="number"
-              min={1}
-              required
-              value={quantity}
-              onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Unit Cost (₹ / {selectedMaterial ? selectedMaterial.unit : newMaterialUnit})
-            </label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              required
-              value={unitCost}
-              onChange={(e) => setUnitCost(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Purchase Date</label>
             <input
@@ -286,21 +340,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           </div>
         </div>
 
-        {/* Supplier & Receipt Status */}
+        {/* Receipt Status */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Supplier Company Name</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Reliance Polymers Ltd"
-              value={supplierName}
-              onChange={(e) => setSupplierName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-
-          <div>
+          <div className="sm:col-start-3">
             <label className="block text-xs font-semibold text-slate-700 mb-1">Entry Delivery Status</label>
             <select
               value={status}
@@ -320,10 +362,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             <span className="font-bold">Stock Maintenance Rule:</span>{' '}
             {status === 'received'
               ? 'Saving this purchase as Received will automatically add ' +
-                quantity.toLocaleString() +
+                purchaseItems.reduce((sum, item) => sum + item.quantity, 0).toLocaleString() +
                 ' ' +
-                (selectedMaterial ? selectedMaterial.unit : newMaterialUnit) +
-                ' to the Raw Materials inventory.'
+                ' across ' + purchaseItems.length + ' line item(s) to the Raw Materials inventory.'
               : 'This purchase will be saved as Pending. Stock will be added to Raw Materials inventory only when marked as Received later.'}
           </div>
         </div>

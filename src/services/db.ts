@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc
+  , deleteField
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage, isLiveFirebaseConfigured } from '../firebase/config';
@@ -24,7 +25,9 @@ import type {
   DashboardMetrics,
   PurchaseOrder,
   PurchaseStatus,
-  PurchasePaymentStatus
+  PurchasePaymentStatus,
+  PurchasePayment
+  , SignedOrderCopy
 } from '../types';
 import {
   initialCustomers,
@@ -302,19 +305,13 @@ export async function deleteCustomer(id: string): Promise<void> {
 // ================= PRODUCTS =================
 export async function getProducts(): Promise<Product[]> {
   const localItems = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-  const initialMap = new Map(initialProducts.map((p) => [p.id, p]));
 
   const mergedWithInitial: Product[] = [];
   const processedIds = new Set<string>();
 
   for (const item of localItems) {
     processedIds.add(item.id);
-    const init = initialMap.get(item.id);
-    if (init && init.imageUrl && (item.imageUrl !== init.imageUrl || item.cloudinaryPublicId !== init.cloudinaryPublicId)) {
-      mergedWithInitial.push({ ...item, imageUrl: init.imageUrl, cloudinaryPublicId: init.cloudinaryPublicId });
-    } else {
-      mergedWithInitial.push(item);
-    }
+    mergedWithInitial.push(item);
   }
 
   for (const init of initialProducts) {
@@ -374,16 +371,25 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
     }
     return item;
   });
-  if (!found) {
-    updated = { id, ...updates } as Product;
-    newList.push(updated);
-  }
+  if (!found) throw new Error(`Product not found: ${id}`);
   setLocalItem(STORAGE_KEYS.PRODUCTS, newList);
 
   if (isLiveFirebaseConfigured && db && updated) {
-    withTimeout(setDoc(doc(db, 'products', id), updated, { merge: true }), 2500).catch((e) =>
-      console.error('Error updating product in Firebase:', e)
+    const firebaseUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
     );
+    try {
+      await withTimeout(setDoc(doc(db, 'products', id), firebaseUpdates, { merge: true }), 2500);
+    } catch (error) {
+      const firebaseError = error as { code?: string; message?: string };
+      console.error('Error updating product in Firebase:', {
+        productId: id,
+        code: firebaseError.code || 'unknown',
+        message: firebaseError.message || String(error),
+        error
+      });
+      throw error;
+    }
   }
 
   if (!updated) throw new Error('Product not found');
@@ -489,6 +495,83 @@ export async function updateOrderStatus(id: string, newStatus: Order['orderStatu
   return updateOrder(id, { orderStatus: newStatus });
 }
 
+export async function uploadOrderSignedCopy(orderId: string, file: File): Promise<Order> {
+  const orders = await getOrders();
+  const target = orders.find((order) => order.id === orderId);
+  if (!target) throw new Error('Sales order not found.');
+
+  if (!isLiveFirebaseConfigured || !storage) {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Offline signed copies are limited to 5 MB. Configure Firebase Storage for larger files.');
+    }
+    const downloadUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Could not read the signed copy for offline storage.'));
+      reader.readAsDataURL(file);
+    });
+    return updateOrder(orderId, {
+      signedCopy: {
+        downloadUrl,
+        storagePath: `local-orders/${orderId}/signed-copy/${Date.now()}_${file.name}`,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        uploadedAt: new Date().toISOString()
+      }
+    });
+  }
+
+  const storagePath = `orders/${orderId}/signed-copy/${Date.now()}_${file.name}`;
+  const fileRef = ref(storage, storagePath);
+  await withTimeout(uploadBytes(fileRef, file), 30000);
+  const downloadUrl = await withTimeout(getDownloadURL(fileRef), 10000);
+  const signedCopy: SignedOrderCopy = {
+    downloadUrl,
+    storagePath,
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    uploadedAt: new Date().toISOString()
+  };
+
+  try {
+    const updated = await updateOrder(orderId, { signedCopy });
+    if (target.signedCopy?.storagePath && target.signedCopy.storagePath !== storagePath) {
+      await deleteObject(ref(storage, target.signedCopy.storagePath)).catch((error) => {
+        console.warn('Could not delete replaced signed copy from Firebase Storage:', error);
+      });
+    }
+    return updated;
+  } catch (error) {
+    await deleteObject(fileRef).catch(() => {});
+    throw error;
+  }
+}
+
+export async function removeOrderSignedCopy(orderId: string): Promise<Order> {
+  const orders = await getOrders();
+  const target = orders.find((order) => order.id === orderId);
+  if (!target) throw new Error('Sales order not found.');
+
+  if (target.signedCopy?.storagePath && storage) {
+    await deleteObject(ref(storage, target.signedCopy.storagePath)).catch((error) => {
+      console.warn('Could not delete signed copy from Firebase Storage:', error);
+    });
+  }
+
+  const { signedCopy: _removedSignedCopy, ...withoutSignedCopy } = target;
+  const list = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
+  const updated = list.map((order) => order.id === orderId ? withoutSignedCopy : order);
+  setLocalItem(STORAGE_KEYS.ORDERS, updated);
+
+  if (isLiveFirebaseConfigured && db) {
+    await withTimeout(updateDoc(doc(db, 'orders', orderId), { signedCopy: deleteField() }), 10000);
+  }
+
+  return withoutSignedCopy;
+}
+
 // ================= DISPATCHES =================
 export async function getDispatches(): Promise<Dispatch[]> {
   const localItems = getLocalItem<Dispatch[]>(STORAGE_KEYS.DISPATCHES, initialDispatches);
@@ -509,6 +592,12 @@ export async function getDispatches(): Promise<Dispatch[]> {
 }
 
 export async function addDispatch(data: Omit<Dispatch, 'id' | 'dispatchNumber' | 'createdAt'>): Promise<Dispatch> {
+  const orders = await getOrders();
+  const targetOrder = orders.find((order) => order.id === data.orderId || order.orderNumber === data.orderNumber);
+  if (targetOrder?.orderStatus === 'cancelled') {
+    throw new Error('Cancelled orders cannot be dispatched.');
+  }
+
   const dispatchNumber = `DSP-${Math.floor(8000 + Math.random() * 2000)}`;
   const newDispatch: Dispatch = {
     ...data,
@@ -580,17 +669,25 @@ async function processDispatchStockDeduction(dispatch: Dispatch): Promise<void> 
     return;
   }
 
+  const orders = await getOrders();
+  const targetOrder = orders.find((o) => o.id === dispatch.orderId || o.orderNumber === dispatch.orderNumber);
+  if (targetOrder?.orderStatus === 'cancelled') {
+    throw new Error('Cancelled orders cannot affect inventory.');
+  }
+
   const products = await getProducts();
+  const deductedByProduct = new Map<string, number>();
   for (const item of dispatch.items) {
     const product = products.find((p) => p.id === item.productId);
     if (product) {
-      const newStock = Math.max(0, product.currentStock - item.quantity);
+      const previouslyDeducted = deductedByProduct.get(product.id) || 0;
+      const totalDeduction = previouslyDeducted + item.quantity;
+      const newStock = Math.max(0, product.currentStock - totalDeduction);
       await updateProduct(product.id, { currentStock: newStock });
+      deductedByProduct.set(product.id, totalDeduction);
     }
   }
 
-  const orders = await getOrders();
-  const targetOrder = orders.find((o) => o.id === dispatch.orderId || o.orderNumber === dispatch.orderNumber);
   if (targetOrder) {
     const newOrderStatus = dispatch.status === 'delivered' ? 'completed' : 'dispatched';
     await updateOrderStatus(targetOrder.id, newOrderStatus);
@@ -628,6 +725,19 @@ export async function getPayments(): Promise<Payment[]> {
 }
 
 export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): Promise<Payment> {
+  if (!Number.isFinite(data.amount) || data.amount <= 0) {
+    throw new Error('Payment amount must be greater than zero.');
+  }
+  const orders = await getOrders();
+  const targetOrder = orders.find((o) => o.id === data.orderId || o.orderNumber === data.orderNumber);
+  if (!targetOrder) throw new Error('Sales order not found.');
+  if (targetOrder.orderStatus === 'cancelled') {
+    throw new Error('Cancelled orders cannot receive payments.');
+  }
+  if (data.amount > Math.max(0, targetOrder.totalAmount - targetOrder.paidAmount)) {
+    throw new Error('Payment amount cannot exceed the outstanding balance.');
+  }
+
   const receiptNumber = `REC-${Math.floor(5000 + Math.random() * 5000)}`;
   const newPayment: Payment = {
     ...data,
@@ -644,17 +754,12 @@ export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): P
     );
   }
 
-  // Update target Order's paidAmount & paymentStatus
-  const orders = await getOrders();
-  const targetOrder = orders.find((o) => o.id === data.orderId || o.orderNumber === data.orderNumber);
-  if (targetOrder) {
-    const newPaid = targetOrder.paidAmount + data.amount;
-    const newStatus: Order['paymentStatus'] = newPaid >= targetOrder.totalAmount ? 'paid' : 'partially_paid';
-    await updateOrder(targetOrder.id, {
-      paidAmount: newPaid,
-      paymentStatus: newStatus
-    });
-  }
+  const newPaid = targetOrder.paidAmount + data.amount;
+  const newStatus: Order['paymentStatus'] = newPaid >= targetOrder.totalAmount ? 'paid' : 'partially_paid';
+  await updateOrder(targetOrder.id, {
+    paidAmount: newPaid,
+    paymentStatus: newStatus
+  });
 
   return newPayment;
 }
@@ -916,6 +1021,47 @@ export async function addPurchase(
   return newPurchase;
 }
 
+export async function updatePurchase(id: string, updates: Partial<PurchaseOrder>): Promise<PurchaseOrder> {
+  const purchases = await getPurchases();
+  const target = purchases.find((purchase) => purchase.id === id);
+  if (!target) throw new Error(`Purchase order not found: ${id}`);
+
+  const updated: PurchaseOrder = { ...target, ...updates };
+  if (target.stockAdded && updates.items) {
+    const previousByMaterial = new Map<string, number>();
+    const nextByMaterial = new Map<string, number>();
+    target.items.forEach((item) => previousByMaterial.set(item.rawMaterialId, (previousByMaterial.get(item.rawMaterialId) || 0) + item.quantity));
+    updated.items.forEach((item) => nextByMaterial.set(item.rawMaterialId, (nextByMaterial.get(item.rawMaterialId) || 0) + item.quantity));
+
+    const materials = await getRawMaterials();
+    const materialIds = new Set([...previousByMaterial.keys(), ...nextByMaterial.keys()]);
+    for (const materialId of materialIds) {
+      const material = materials.find((item) => item.id === materialId);
+      if (!material) continue;
+      const delta = (nextByMaterial.get(materialId) || 0) - (previousByMaterial.get(materialId) || 0);
+      if (delta !== 0) {
+        await updateRawMaterial(materialId, {
+          currentStock: Math.max(0, material.currentStock + delta),
+          lastRestocked: updated.purchaseDate || new Date().toISOString().split('T')[0]
+        });
+      }
+    }
+  }
+
+  const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
+  setLocalItem(STORAGE_KEYS.PURCHASES, list.map((purchase) => purchase.id === id ? updated : purchase));
+
+  if (isLiveFirebaseConfigured && db) {
+    try {
+      await withTimeout(setDoc(doc(db, 'purchases', id), updates, { merge: true }), 2500);
+    } catch (error) {
+      console.error('Error updating purchase in Firebase:', { purchaseId: id, error });
+      throw error;
+    }
+  }
+  return updated;
+}
+
 export async function updatePurchaseStatus(id: string, newStatus: PurchaseStatus): Promise<PurchaseOrder> {
   const purchases = await getPurchases();
   const target = purchases.find((p) => p.id === id);
@@ -942,11 +1088,14 @@ export async function updatePurchaseStatus(id: string, newStatus: PurchaseStatus
   return updated;
 }
 
-export async function recordPurchasePayment(id: string, amount: number): Promise<PurchaseOrder> {
+export async function recordPurchasePayment(id: string, amount: number, paymentDate = new Date().toISOString().split('T')[0], notes = ''): Promise<PurchaseOrder> {
   const purchases = await getPurchases();
   const target = purchases.find((p) => p.id === id);
 
   if (!target) throw new Error('Purchase order not found');
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Payment amount must be greater than zero.');
+  if (!paymentDate || Number.isNaN(Date.parse(`${paymentDate}T00:00:00`))) throw new Error('Payment date is invalid.');
+  if (amount > Math.max(0, target.totalAmount - target.paidAmount)) throw new Error('Payment amount cannot exceed the outstanding balance.');
 
   const newPaidAmount = target.paidAmount + amount;
   const newPaymentStatus: PurchasePaymentStatus =
@@ -955,7 +1104,19 @@ export async function recordPurchasePayment(id: string, amount: number): Promise
   const updated: PurchaseOrder = {
     ...target,
     paidAmount: newPaidAmount,
-    paymentStatus: newPaymentStatus
+    paymentStatus: newPaymentStatus,
+    paymentRecords: [
+      ...(target.paymentRecords || []),
+      {
+        id: `PAY-${Date.now()}`,
+        purchaseId: target.id,
+        purchaseNumber: target.purchaseNumber,
+        supplierName: target.supplierName,
+        amount,
+        paymentDate,
+        notes
+      } satisfies PurchasePayment
+    ]
   };
 
   const list = getLocalItem<PurchaseOrder[]>(STORAGE_KEYS.PURCHASES, initialPurchases);
@@ -966,7 +1127,7 @@ export async function recordPurchasePayment(id: string, amount: number): Promise
     withTimeout(
       setDoc(
         doc(db, 'purchases', id),
-        { paidAmount: newPaidAmount, paymentStatus: newPaymentStatus },
+        { paidAmount: newPaidAmount, paymentStatus: newPaymentStatus, paymentRecords: updated.paymentRecords },
         { merge: true }
       ),
       2500
@@ -1001,14 +1162,18 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
   }
 
   const materials = await getRawMaterials();
+  const additionsByMaterial = new Map<string, number>();
   for (const item of purchase.items) {
     const material = materials.find((m) => m.id === item.rawMaterialId);
     if (material) {
-      const newStock = material.currentStock + item.quantity;
+      const previousAddition = additionsByMaterial.get(material.id) || 0;
+      const totalAddition = previousAddition + item.quantity;
+      const newStock = material.currentStock + totalAddition;
       await updateRawMaterial(material.id, {
         currentStock: newStock,
         lastRestocked: purchase.purchaseDate || new Date().toISOString().split('T')[0]
       });
+      additionsByMaterial.set(material.id, totalAddition);
     }
   }
 

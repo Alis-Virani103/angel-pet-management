@@ -76,24 +76,25 @@ export const Purchases: React.FC<PurchasesProps> = ({
   // Filtering
   const filteredPurchases = purchases.filter((p) => {
     const q = searchQuery.toLowerCase();
+    const items = p.items || [];
     const matchesSearch =
-      p.purchaseNumber.toLowerCase().includes(q) ||
-      p.supplierName.toLowerCase().includes(q) ||
-      p.items.some((i) => i.rawMaterialName.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+      (p.purchaseNumber || '').toLowerCase().includes(q) ||
+      (p.supplierName || '').toLowerCase().includes(q) ||
+      items.some((i) => (i.rawMaterialName || '').toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q));
 
     const matchesSupplier = supplierFilter === 'all' || p.supplierName === supplierFilter;
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || p.paymentStatus === paymentFilter;
-    const matchesCategory = categoryFilter === 'all' || p.items.some((i) => i.category === categoryFilter);
+    const matchesCategory = categoryFilter === 'all' || items.some((i) => i.category === categoryFilter);
 
     return matchesSearch && matchesSupplier && matchesStatus && matchesPayment && matchesCategory;
   });
 
   // Metrics
-  const totalSpend = purchases.reduce((sum, p) => sum + p.totalAmount, 0);
-  const totalQtyPurchased = purchases.reduce((sum, p) => sum + p.totalQuantity, 0);
+  const totalSpend = purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+  const totalQtyPurchased = purchases.reduce((sum, p) => sum + (p.totalQuantity || 0), 0);
   const receivedCount = purchases.filter((p) => p.status === 'received' || p.status === 'completed').length;
-  const totalUnpaidBalance = purchases.reduce((sum, p) => sum + Math.max(0, p.totalAmount - p.paidAmount), 0);
+  const totalUnpaidBalance = purchases.reduce((sum, p) => sum + Math.max(0, (p.totalAmount || 0) - (p.paidAmount || 0)), 0);
 
   return (
     <div className="space-y-6">
@@ -259,7 +260,8 @@ export const Purchases: React.FC<PurchasesProps> = ({
                 </tr>
               ) : (
                 filteredPurchases.map((po) => {
-                  const mainItem = po.items[0];
+                  const purchaseItems = po.items || [];
+                  const mainItem = purchaseItems[0];
                   return (
                     <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-4 font-bold">
@@ -271,16 +273,16 @@ export const Purchases: React.FC<PurchasesProps> = ({
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-900 flex items-center gap-1">
                           <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{po.supplierName}</span>
+                          <span>{po.supplierName || 'Unknown Supplier'}</span>
                         </div>
                         {po.supplierPhone && <div className="text-[11px] text-slate-400">{po.supplierPhone}</div>}
                       </td>
                       <td className="py-3.5 px-4">
                         {mainItem ? (
                           <div>
-                            <div className="font-semibold text-slate-800">{mainItem.rawMaterialName}</div>
+                            <div className="font-semibold text-slate-800">{purchaseItems.length > 1 ? `${purchaseItems.length} line items` : mainItem?.rawMaterialName || 'No item details'}</div>
                             <div className="text-[11px] text-slate-400 capitalize">
-                              Cat: {mainItem.category} | Rate: ₹{mainItem.unitCost.toFixed(2)}/{mainItem.unit}
+                              {purchaseItems.length > 1 ? purchaseItems.map((item) => item.rawMaterialName).join(', ') : mainItem ? `Cat: ${mainItem.category} | Rate: ₹${mainItem.unitCost.toFixed(2)}/${mainItem.unit}` : 'No item details'}
                             </div>
                           </div>
                         ) : (
@@ -288,10 +290,10 @@ export const Purchases: React.FC<PurchasesProps> = ({
                         )}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {po.totalQuantity.toLocaleString()} {mainItem ? mainItem.unit : ''}
+                        {(po.totalQuantity || 0).toLocaleString()} {purchaseItems.length === 1 && mainItem ? mainItem.unit : 'total'}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        ₹{po.totalAmount.toLocaleString('en-IN')}
+                        ₹{(po.totalAmount || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="py-3.5 px-4">
                         <Badge status={po.paymentStatus} />
