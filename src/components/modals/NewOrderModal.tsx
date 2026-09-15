@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Customer, Product, Order, OrderItem, PriceCategory } from '../../types';
 import { getCustomers, getProducts, getOrders, addOrder, addCustomer } from '../../services/db';
-import { ShoppingCart, Check, Plus, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Check, Plus, AlertCircle, Search } from 'lucide-react';
 
 interface NewOrderModalProps {
   isOpen: boolean;
@@ -38,6 +38,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   // Form states
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [items, setItems] = useState<DraftOrderItem[]>([createDraftItem()]);
+  const [productSearches, setProductSearches] = useState<Record<string, string>>({});
+  const [focusedProductItemId, setFocusedProductItemId] = useState<string | null>(null);
   const [priceCategory, setPriceCategory] = useState<PriceCategory>('A');
   const [includeGst, setIncludeGst] = useState(true);
   const [notes, setNotes] = useState('');
@@ -135,6 +137,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
   const handleRateChange = (id: string, value: string) => {
     updateItem(id, { rate: normalizeRateInput(value) });
+  };
+
+  const handleProductSearchChange = (id: string, value: string) => {
+    setProductSearches((currentSearches) => ({ ...currentSearches, [id]: value }));
+  };
+
+  const handleProductSelect = (itemId: string, productId: string) => {
+    updateItem(itemId, { productId });
+    setProductSearches((currentSearches) => ({ ...currentSearches, [itemId]: '' }));
+    setFocusedProductItemId(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -318,22 +330,64 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               const unitPrice = item.rate === '' ? 0 : Number(item.rate);
               const previousRate = getPreviousRate(selectedCustomerId, item.productId);
               const itemQuantity = item.quantity === '' ? 0 : item.quantity;
+              const productSearch = productSearches[item.id] || '';
+              const isProductSearchFocused = focusedProductItemId === item.id;
+              const matchingProducts = products.filter((candidate) => {
+                const searchText = productSearch.trim().toLowerCase();
+                if (!searchText) return true;
+                return [candidate.name, candidate.type, candidate.sku, candidate.sizeOrType]
+                  .filter(Boolean)
+                  .some((value) => value.toLowerCase().includes(searchText));
+              });
               return (
                 <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_90px_110px_110px_minmax(140px,1fr)_auto] gap-2 items-end p-3 bg-white rounded-xl border border-slate-200">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product {index + 1}</label>
-                    <select
-                      value={item.productId}
-                      onChange={(e) => updateItem(item.id, { productId: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                    >
-                      <option value="">Select product</option>
-                      {products.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.name} ({candidate.type === 'bottle' ? 'Bottle' : 'Cap'}) - Stock: {candidate.currentStock.toLocaleString()}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 w-3.5 h-3.5 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          role="combobox"
+                          aria-label={`Search product ${index + 1}`}
+                          aria-expanded={isProductSearchFocused}
+                          aria-controls={`product-options-${item.id}`}
+                          value={isProductSearchFocused ? productSearch : product?.name || ''}
+                          placeholder={product ? `${product.name} (${product.type === 'bottle' ? 'Bottle' : 'Cap'})` : 'Search products'}
+                          onFocus={() => {
+                            setFocusedProductItemId(item.id);
+                            setProductSearches((currentSearches) => ({ ...currentSearches, [item.id]: '' }));
+                          }}
+                          onChange={(e) => handleProductSearchChange(item.id, e.target.value)}
+                          onBlur={() => {
+                            window.setTimeout(() => setFocusedProductItemId((currentId) => currentId === item.id ? null : currentId), 150);
+                          }}
+                          className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+                      {isProductSearchFocused && (
+                        <div id={`product-options-${item.id}`} role="listbox" className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                          {matchingProducts.length > 0 ? matchingProducts.map((candidate) => (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              role="option"
+                              aria-selected={candidate.id === item.productId}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleProductSelect(item.id, candidate.id)}
+                              className={`w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-blue-50 ${candidate.id === item.productId ? 'bg-blue-50 text-blue-700' : 'text-slate-700'}`}
+                            >
+                              <span className="block font-semibold">{candidate.name}</span>
+                              <span className="block text-[10px] text-slate-500">
+                                {candidate.type === 'bottle' ? 'Bottle' : 'Cap'}{candidate.sku ? ` · ${candidate.sku}` : ''} · Stock: {candidate.currentStock.toLocaleString()}
+                              </span>
+                            </button>
+                          )) : (
+                            <div className="px-3 py-3 text-xs text-slate-500">No products found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Type</label>

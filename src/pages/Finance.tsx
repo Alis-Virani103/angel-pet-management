@@ -31,6 +31,7 @@ type PartyType = 'customer' | 'supplier';
 
 interface PartyLedgerRow {
   date: string;
+  party?: string;
   transaction: string;
   reference: string;
   debit: number;
@@ -61,6 +62,7 @@ const toDateKey = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+const ALL_PARTIES_ID = '__all_parties__';
 
 export const Finance: React.FC<FinanceProps> = ({
   onOpenRecordPaymentModal,
@@ -205,21 +207,50 @@ export const Finance: React.FC<FinanceProps> = ({
   };
 
   const partyOptions = partyType === 'customer'
-    ? customers
+    ? [{ id: ALL_PARTIES_ID, name: 'All Customers', contact: '', phone: '' }, ...customers
         .filter((customer) => {
           const query = partySearch.trim().toLowerCase();
           return !query || customer.company.toLowerCase().includes(query) || customer.name.toLowerCase().includes(query) || customer.phone.toLowerCase().includes(query);
         })
-        .map((customer) => ({ id: customer.id, name: customer.company || customer.name, contact: customer.name, phone: customer.phone }))
-    : Array.from(new Set(purchases.map((purchase) => purchase.supplierName).filter(Boolean)))
+        .map((customer) => ({ id: customer.id, name: customer.company || customer.name, contact: customer.name, phone: customer.phone }))]
+    : [{ id: ALL_PARTIES_ID, name: 'All Suppliers', contact: '', phone: '' }, ...Array.from(new Set(purchases.map((purchase) => purchase.supplierName).filter(Boolean)))
         .filter((supplier) => supplier.toLowerCase().includes(partySearch.trim().toLowerCase()))
-        .map((supplier) => ({ id: supplier, name: supplier, contact: '', phone: '' }));
+        .map((supplier) => ({ id: supplier, name: supplier, contact: '', phone: '' }))];
 
   const selectedCustomer = partyType === 'customer' ? customers.find((customer) => customer.id === selectedPartyId) : undefined;
-  const selectedSupplier = partyType === 'supplier' ? selectedPartyId : '';
+  const selectedSupplier = partyType === 'supplier' && selectedPartyId !== ALL_PARTIES_ID ? selectedPartyId : '';
+  const isAllParties = selectedPartyId === ALL_PARTIES_ID;
   const partyLedgerBase: Array<Omit<PartyLedgerRow, 'balance'>> = [];
 
-  if (partyType === 'customer' && selectedCustomer) {
+  if (partyType === 'customer' && isAllParties) {
+    const customerOrders = orders.filter((order) => order.orderStatus !== 'cancelled');
+    customerOrders.forEach((order) => {
+      partyLedgerBase.push({
+        date: order.orderDate,
+        party: order.companyName || order.customerName,
+        transaction: 'Sale',
+        reference: order.orderNumber,
+        debit: order.totalAmount,
+        credit: 0,
+        detailsPath: `/sales/${order.id}`
+      });
+    });
+    payments
+      .filter((payment) => customerOrders.some((order) => order.id === payment.orderId || order.orderNumber === payment.orderId) || customers.some((customer) => customer.id === payment.customerId || customer.company === payment.customerName || customer.name === payment.customerName))
+      .forEach((payment) => {
+        const customer = customers.find((candidate) => candidate.id === payment.customerId || candidate.company === payment.customerName);
+        const order = customerOrders.find((candidate) => candidate.id === payment.orderId || candidate.orderNumber === payment.orderId);
+        partyLedgerBase.push({
+          date: payment.paymentDate,
+          party: customer?.company || customer?.name || order?.companyName || order?.customerName || 'Customer',
+          transaction: 'Payment',
+          reference: payment.receiptNumber,
+          debit: 0,
+          credit: payment.amount,
+          detailsPath: `/sales/${payment.orderId}`
+        });
+      });
+  } else if (partyType === 'customer' && selectedCustomer) {
     const customerOrders = orders.filter((order) =>
       order.orderStatus !== 'cancelled' &&
       (order.customerId === selectedCustomer.id || order.companyName === selectedCustomer.company || order.customerName === selectedCustomer.name)
@@ -245,6 +276,45 @@ export const Finance: React.FC<FinanceProps> = ({
           credit: payment.amount,
           detailsPath: `/sales/${payment.orderId}`
         });
+      });
+  } else if (partyType === 'supplier' && selectedPartyId === ALL_PARTIES_ID) {
+    purchases
+      .filter((purchase) => purchase.status !== 'cancelled')
+      .forEach((purchase) => {
+        partyLedgerBase.push({
+          date: purchase.purchaseDate,
+          party: purchase.supplierName,
+          transaction: 'Purchase',
+          reference: purchase.purchaseNumber,
+          debit: purchase.totalAmount,
+          credit: 0,
+          detailsPath: `/purchases/${purchase.id}`
+        });
+        const recordedPayments = purchase.paymentRecords || [];
+        recordedPayments.forEach((payment) => {
+          partyLedgerBase.push({
+            date: payment.paymentDate,
+            party: purchase.supplierName,
+            transaction: 'Payment',
+            reference: payment.id,
+            debit: 0,
+            credit: payment.amount,
+            detailsPath: `/purchases/${purchase.id}`
+          });
+        });
+        const recordedTotal = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+        const legacyPaid = Math.max(0, (purchase.paidAmount || 0) - recordedTotal);
+        if (legacyPaid > 0) {
+          partyLedgerBase.push({
+            date: '',
+            party: purchase.supplierName,
+            transaction: 'Payment',
+            reference: `PAY-${purchase.purchaseNumber}`,
+            debit: 0,
+            credit: legacyPaid,
+            detailsPath: `/purchases/${purchase.id}`
+          });
+        }
       });
   } else if (partyType === 'supplier' && selectedSupplier) {
     purchases
@@ -473,8 +543,8 @@ export const Finance: React.FC<FinanceProps> = ({
               <div className="p-4 rounded-xl border border-slate-200 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Party Details</div>
-                  <div className="text-base font-bold text-slate-900 mt-1">{partyType === 'customer' ? selectedCustomer?.company || selectedCustomer?.name : selectedSupplier}</div>
-                  <div className="text-xs text-slate-500 mt-1">{partyType === 'customer' ? `${selectedCustomer?.name || ''}${selectedCustomer?.phone ? ` · ${selectedCustomer.phone}` : ''}` : 'Supplier'} · {partyType === 'customer' ? 'Customer' : 'Supplier'}</div>
+                <div className="text-base font-bold text-slate-900 mt-1">{isAllParties ? `All ${partyType === 'customer' ? 'Customers' : 'Suppliers'}` : partyType === 'customer' ? selectedCustomer?.company || selectedCustomer?.name : selectedSupplier}</div>
+                <div className="text-xs text-slate-500 mt-1">{isAllParties ? `Combined ${partyType === 'customer' ? 'customer' : 'supplier'} transactions` : partyType === 'customer' ? `${selectedCustomer?.name || ''}${selectedCustomer?.phone ? ` · ${selectedCustomer.phone}` : ''}` : 'Supplier'} · {partyType === 'customer' ? 'Customer' : 'Supplier'}</div>
                 </div>
                 <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800"><Printer className="w-3.5 h-3.5" /> Print Statement</button>
               </div>
@@ -492,9 +562,9 @@ export const Finance: React.FC<FinanceProps> = ({
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider"><th className="py-3 px-4">Date</th><th className="py-3 px-4">Transaction</th><th className="py-3 px-4">Reference</th><th className="py-3 px-4 text-right">Debit</th><th className="py-3 px-4 text-right">Credit</th><th className="py-3 px-4 text-right">Balance</th></tr></thead>
+                <thead><tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider"><th className="py-3 px-4">Date</th>{isAllParties && <th className="py-3 px-4">Party</th>}<th className="py-3 px-4">Transaction</th><th className="py-3 px-4">Reference</th><th className="py-3 px-4 text-right">Debit</th><th className="py-3 px-4 text-right">Credit</th><th className="py-3 px-4 text-right">Balance</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                  {!selectedPartyId || partyLedgerRows.length === 0 ? <tr><td colSpan={6} className="py-12 text-center text-slate-400">Select a party with transactions to view its statement.</td></tr> : partyLedgerRows.map((row) => <tr key={`${row.transaction}-${row.reference}-${row.date}`} className="hover:bg-slate-50/60"><td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date || 'Date unavailable'}</td><td className="py-3 px-4 font-semibold text-slate-900">{row.transaction}</td><td className="py-3 px-4">{row.detailsPath ? <Link to={row.detailsPath} className="text-blue-600 hover:underline">{row.reference}</Link> : row.reference}</td><td className="py-3 px-4 text-right font-semibold text-blue-700">{row.debit ? formatCurrency(row.debit) : '—'}</td><td className="py-3 px-4 text-right font-semibold text-emerald-700">{row.credit ? formatCurrency(row.credit) : '—'}</td><td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.balance)}</td></tr>)}
+                  {!selectedPartyId || partyLedgerRows.length === 0 ? <tr><td colSpan={isAllParties ? 7 : 6} className="py-12 text-center text-slate-400">{selectedPartyId ? 'No transactions found for the selected period.' : 'Select a party with transactions to view its statement.'}</td></tr> : partyLedgerRows.map((row) => <tr key={`${row.party || ''}-${row.transaction}-${row.reference}-${row.date}`} className="hover:bg-slate-50/60"><td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date || 'Date unavailable'}</td>{isAllParties && <td className="py-3 px-4 font-semibold text-slate-900">{row.party}</td>}<td className="py-3 px-4 font-semibold text-slate-900">{row.transaction}</td><td className="py-3 px-4">{row.detailsPath ? <Link to={row.detailsPath} className="text-blue-600 hover:underline">{row.reference}</Link> : row.reference}</td><td className="py-3 px-4 text-right font-semibold text-blue-700">{row.debit ? formatCurrency(row.debit) : '—'}</td><td className="py-3 px-4 text-right font-semibold text-emerald-700">{row.credit ? formatCurrency(row.credit) : '—'}</td><td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.balance)}</td></tr>)}
                 </tbody>
               </table>
             </div>

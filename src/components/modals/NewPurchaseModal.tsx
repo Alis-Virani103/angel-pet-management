@@ -177,7 +177,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       onClose={onClose}
       title="Record New Purchase Entry"
       subtitle="Enter raw material purchase details to track expenditure and update stock"
-      maxWidth="2xl"
+      maxWidth="4xl"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
@@ -207,38 +207,41 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         </div>
 
         {/* Raw Material Selection */}
-        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Bill Line Items
-            </label>
+        <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Bill Line Items
+              </label>
+              <p className="text-[11px] text-slate-500 mt-1">Add each purchased material as a separate line.</p>
+            </div>
             <button
               type="button"
               onClick={() => setItems((currentItems) => [...currentItems, createDraftItem()])}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              className="w-full sm:w-auto px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center justify-center gap-1.5 shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Item
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {items.map((item, index) => {
               const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
               const line = purchaseItems[index];
               return (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_110px_140px_140px_auto] gap-2 items-end p-3 bg-white rounded-xl border border-slate-200">
-                  <div>
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(120px,0.9fr)_minmax(150px,1fr)_minmax(155px,1fr)_auto] gap-x-3 gap-y-3 items-end p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <div className="min-w-0">
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product / Material {index + 1}</label>
                     <select
                       value={item.rawMaterialId}
                       onChange={(e) => handleMaterialChange(item.id, e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                      className="w-full min-w-0 px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     >
                       <option value="">Select material</option>
                       {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
                     </select>
-                    <div className="text-[10px] text-slate-400 mt-1">{material ? `Stock: ${material.currentStock.toLocaleString()} ${material.unit}` : 'Select a raw material'}</div>
+                    <div className="text-[10px] text-slate-400 mt-1.5">{material ? `Stock: ${material.currentStock.toLocaleString()} ${material.unit}` : 'Select a raw material'}</div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quantity</label>
@@ -248,9 +251,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                       required
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, { quantity: e.target.value.replace(/[^\d.]/g, '') })}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
-                    <div className="text-[10px] text-slate-400 mt-1">Unit: {material?.unit || newMaterialUnit}</div>
+                    <div className="text-[10px] text-slate-400 mt-1.5">Unit: {material?.unit || newMaterialUnit}</div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate / Unit Cost</label>
@@ -260,15 +263,17 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                       required
                       value={item.unitCost}
                       onChange={(e) => updateItem(item.id, { unitCost: e.target.value.replace(/[^\d.]/g, '') })}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
-                  <div className="text-xs font-semibold text-slate-700 pb-2">Amount: ₹{(line?.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                  <div className="min-h-[42px] flex items-center rounded-xl bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+                    <span>Amount: ₹{(line?.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
                   <button
                     type="button"
                     disabled={items.length === 1}
                     onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
-                    className="px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40"
+                    className="w-full md:w-auto min-h-[42px] px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40"
                   >
                     Remove
                   </button>
@@ -326,37 +331,35 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           )}
         </div>
 
-        {/* Purchase Quantities & Pricing */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Purchase Date</label>
-            <input
-              type="date"
-              required
-              value={purchaseDate}
-              onChange={(e) => setPurchaseDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-        </div>
-
-        {/* Receipt Status */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-start-3">
+        {/* Purchase Date & Receipt Status */}
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Purchase Date</label>
+              <input
+                type="date"
+                required
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Entry Delivery Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as PurchaseStatus)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="w-full px-3 py-2.5 bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
             >
               <option value="received">Received (Adds to Stock Now)</option>
               <option value="pending">Pending Delivery (Order Placed)</option>
             </select>
+            </div>
           </div>
         </div>
 
         {/* Stock Addition Information Banner */}
-        <div className="p-3 bg-blue-50/70 border border-blue-200 text-blue-800 text-xs rounded-xl flex items-start space-x-2 font-medium">
+        <div className="p-3 bg-blue-50/70 border border-blue-200 text-blue-800 text-xs rounded-xl flex items-start gap-2 font-medium leading-5">
           <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <div>
             <span className="font-bold">Stock Maintenance Rule:</span>{' '}
@@ -370,13 +373,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         </div>
 
         {/* Total Cost Calculation Summary */}
-        <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
-          <div className="flex justify-between text-xs text-slate-400">
+        <div className="p-4 sm:p-5 bg-slate-900 text-white rounded-2xl space-y-3">
+          <div className="flex justify-between items-center text-xs text-slate-400">
             <span>Material Subtotal:</span>
             <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
 
-          <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
             <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
               <input
                 type="checkbox"
@@ -391,7 +394,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             </span>
           </div>
 
-          <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800">
+          <div className="flex justify-between items-center gap-3 text-base font-bold text-white pt-3 border-t border-slate-800">
             <span>Grand Total Purchase Cost:</span>
             <span className="text-blue-400">
               ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
