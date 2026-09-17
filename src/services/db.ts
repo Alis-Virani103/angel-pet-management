@@ -601,8 +601,15 @@ export async function getDispatches(): Promise<Dispatch[]> {
 export async function addDispatch(data: Omit<Dispatch, 'id' | 'dispatchNumber' | 'createdAt'>): Promise<Dispatch> {
   const orders = await getOrders();
   const targetOrder = orders.find((order) => order.id === data.orderId || order.orderNumber === data.orderNumber);
+  if (!targetOrder) {
+    throw new Error('Sales order not found.');
+  }
   if (targetOrder?.orderStatus === 'cancelled') {
     throw new Error('Cancelled orders cannot be dispatched.');
+  }
+  const existingDispatches = await getDispatches();
+  if (existingDispatches.some((dispatch) => dispatch.orderId === targetOrder.id && dispatch.stockDeducted)) {
+    throw new Error('This sales order has already been dispatched.');
   }
 
   const dispatchNumber = `DSP-${Math.floor(8000 + Math.random() * 2000)}`;
@@ -685,13 +692,19 @@ async function processDispatchStockDeduction(dispatch: Dispatch): Promise<void> 
   const products = await getProducts();
   const deductedByProduct = new Map<string, number>();
   for (const item of dispatch.items) {
-    const product = products.find((p) => p.id === item.productId);
+    deductedByProduct.set(item.productId, (deductedByProduct.get(item.productId) || 0) + item.quantity);
+  }
+  for (const [productId, quantity] of deductedByProduct) {
+    const product = products.find((candidate) => candidate.id === productId);
+    if (product && product.currentStock < quantity) {
+      throw new Error(`Insufficient stock for ${product.name}. Available: ${product.currentStock}, required: ${quantity}.`);
+    }
+  }
+  for (const [productId, quantity] of deductedByProduct) {
+    const product = products.find((p) => p.id === productId);
     if (product) {
-      const previouslyDeducted = deductedByProduct.get(product.id) || 0;
-      const totalDeduction = previouslyDeducted + item.quantity;
-      const newStock = Math.max(0, product.currentStock - totalDeduction);
+      const newStock = product.currentStock - quantity;
       await updateProduct(product.id, { currentStock: newStock });
-      deductedByProduct.set(product.id, totalDeduction);
     }
   }
 

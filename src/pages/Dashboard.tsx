@@ -27,6 +27,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import { useTranslation } from '../i18n';
 
 interface DashboardProps {
   onOpenNewOrderModal: () => void;
@@ -43,6 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenNewDispatchModal,
   onOpenAddFinishedGoodsModal
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -105,7 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Header Banner & Action Buttons */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Good Morning, Admin</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Good Morning, Admin')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
             Here's what's happening at Angel Pet packaging plant today.
           </p>
@@ -117,28 +119,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-colors shadow-sm shadow-blue-500/20 flex items-center space-x-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Order</span>
+            <span>{t('New Order')}</span>
           </button>
           <button
             onClick={onOpenAddCustomerModal}
             className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1.5"
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Add Customer</span>
+            <span>{t('Add Customer')}</span>
           </button>
           <button
             onClick={onOpenAddFinishedGoodsModal}
             className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1.5"
           >
             <Boxes className="w-3.5 h-3.5" />
-            <span>Add Goods</span>
+            <span>{t('Add Goods')}</span>
           </button>
           <button
             onClick={onOpenRecordPaymentModal}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1.5"
           >
             <IndianRupee className="w-3.5 h-3.5" />
-            <span>Record Payment</span>
+            <span>{t('Record Payment')}</span>
           </button>
         </div>
       </div>
@@ -146,7 +148,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
-          title="Total Sales"
+          title={t('Total Sales')}
           value={`₹${(totalSales / 100000).toFixed(1)}L`}
           icon={IndianRupee}
           change="+12.4%"
@@ -157,7 +159,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() => navigate('/sales')}
         />
         <StatCard
-          title="Total Orders"
+          title={t('Total Orders')}
           value={totalOrdersCount}
           icon={ShoppingCart}
           change="+6.1%"
@@ -168,7 +170,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() => navigate('/sales')}
         />
         <StatCard
-          title="Pending Orders"
+          title={t('Pending Orders')}
           value={pendingOrdersCount}
           icon={Clock}
           change="Needs Action"

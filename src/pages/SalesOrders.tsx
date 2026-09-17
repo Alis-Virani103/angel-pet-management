@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   XCircle
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface SalesOrdersProps {
   onOpenNewOrderModal: () => void;
@@ -29,6 +30,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
   onOpenRecordPaymentModal,
   onOpenNewDispatchModal
 }) => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -97,7 +99,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Top Title & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Sales & Orders</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Sales & Orders')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             Showing {sortedOrders.length} of {orders.length} orders
           </p>
@@ -108,7 +110,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-2 self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
-          <span>New Order</span>
+          <span>{t('New Order')}</span>
         </button>
       </div>
 
@@ -120,7 +122,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search order ID, company, or bottle..."
+              placeholder={t('Search order ID, company, or bottle...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
@@ -134,7 +136,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               onChange={(e) => setCustomerFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">All Customers</option>
+              <option value="all">{t('All Customers')}</option>
               {customerNames.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -150,7 +152,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">Order Status</option>
+              <option value="all">{t('Order Status')}</option>
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="dispatched">Dispatched</option>
@@ -166,7 +168,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               onChange={(e) => setPaymentFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">Payment Status</option>
+              <option value="all">{t('Payment Status')}</option>
               <option value="pending">Pending</option>
               <option value="partially_paid">Partially Paid</option>
               <option value="paid">Paid</option>
@@ -180,7 +182,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               onChange={(e) => setTierFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">Price Category</option>
+              <option value="all">{t('Price Category')}</option>
               <option value="A">Category A</option>
               <option value="B">Category B</option>
               <option value="C">Category C</option>

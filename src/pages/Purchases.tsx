@@ -16,6 +16,7 @@ import {
   Clock,
   Building2
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface PurchasesProps {
   onOpenNewPurchaseModal: () => void;
@@ -26,6 +27,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
   onOpenNewPurchaseModal,
   onOpenRecordPurchasePaymentModal
 }) => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -101,7 +103,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
       {/* Header & Main Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Purchases</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Purchases')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             Raw material purchase entries, supplier orders, and automatic inventory stock updates
           </p>
@@ -113,14 +115,14 @@ export const Purchases: React.FC<PurchasesProps> = ({
             className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-colors flex items-center space-x-1.5"
           >
             <IndianRupee className="w-4 h-4 text-emerald-400" />
-            <span>Record Payment</span>
+            <span>{t('Record Payment')}</span>
           </button>
           <button
             onClick={onOpenNewPurchaseModal}
             className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
-            <span>New Purchase Entry</span>
+            <span>{t('New Purchase Entry')}</span>
           </button>
         </div>
       </div>
@@ -180,7 +182,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search PO number, supplier, or material..."
+              placeholder={t('Search PO number, supplier, or material...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
@@ -194,7 +196,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
               onChange={(e) => setSupplierFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">All Suppliers</option>
+              <option value="all">{t('All Suppliers')}</option>
               {supplierNames.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -210,7 +212,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">Delivery Status</option>
+              <option value="all">{t('Delivery Status')}</option>
               <option value="received">Received</option>
               <option value="pending">Pending</option>
               <option value="completed">Completed</option>
@@ -225,7 +227,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
               onChange={(e) => setPaymentFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-700 rounded-xl border border-slate-200 focus:bg-white"
             >
-              <option value="all">Payment Status</option>
+              <option value="all">{t('Payment Status')}</option>
               <option value="pending">Unpaid</option>
               <option value="partially_paid">Partially Paid</option>
               <option value="paid">Fully Paid</option>

@@ -31,8 +31,10 @@ import { UploadDocumentModal } from './components/modals/UploadDocumentModal';
 import { NewPurchaseModal } from './components/modals/NewPurchaseModal';
 import { RecordPurchasePaymentModal } from './components/modals/RecordPurchasePaymentModal';
 import { ProductType, Customer, Product, RawMaterial } from './types';
+import { useTranslation } from './i18n';
 
 export function App() {
+  const { language } = useTranslation();
   // Global modal state control
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
@@ -95,7 +97,8 @@ export function App() {
   };
 
   return (
-    <Router>
+    <div key={language}>
+      <Router>
       <Routes>
         <Route
           element={
@@ -323,7 +326,8 @@ export function App() {
         defaultPurchaseId={targetPurchaseIdForPayment}
         onPaymentRecorded={triggerRefresh}
       />
-    </Router>
+      </Router>
+    </div>
   );
 }
 

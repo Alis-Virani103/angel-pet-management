@@ -1,5 +1,6 @@
 import React from 'react';
 import { OrderStatus, PaymentStatus, DispatchStatus } from '../../types';
+import { useTranslation } from '../../i18n';
 
 interface BadgeProps {
   status: OrderStatus | PaymentStatus | DispatchStatus | 'active' | 'inactive' | 'healthy' | 'low_stock' | string;
@@ -7,6 +8,7 @@ interface BadgeProps {
 }
 
 export const Badge: React.FC<BadgeProps> = ({ status, size = 'sm' }) => {
+  const { t } = useTranslation();
   const sizeClasses = size === 'sm' ? 'px-2.5 py-0.5 text-[11px]' : 'px-3 py-1 text-xs';
 
   let colorClasses = 'bg-slate-100 text-slate-700 border-slate-200';
@@ -69,7 +71,7 @@ export const Badge: React.FC<BadgeProps> = ({ status, size = 'sm' }) => {
   return (
     <span className={`inline-flex items-center font-medium rounded-full border ${sizeClasses} ${colorClasses}`}>
       <span className="w-1.5 h-1.5 rounded-full bg-current mr-1.5 opacity-80" />
-      <span className="capitalize">{label}</span>
+      <span className="capitalize">{t(label)}</span>
     </span>
   );
 };

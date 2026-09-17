@@ -9,8 +9,10 @@ import {
   CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 export const SettingsPage: React.FC = () => {
+  const { t } = useTranslation();
   const [settings, setSettingsState] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -35,7 +37,7 @@ export const SettingsPage: React.FC = () => {
     setSaving(true);
     try {
       await updateSettings(settings);
-      setSuccessMsg('Settings saved successfully!');
+      setSuccessMsg(t('Settings saved successfully!'));
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
@@ -47,7 +49,7 @@ export const SettingsPage: React.FC = () => {
   const handleResetSeed = async () => {
     try {
       await seedDatabase(true);
-      setSuccessMsg('Database successfully reset to initial reference demo data!');
+      setSuccessMsg(t('Database successfully reset to initial reference demo data!'));
       setTimeout(() => {
         window.location.reload();
       }, 800);
@@ -56,15 +58,15 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  if (!settings) return <div className="p-8 text-center text-xs text-slate-400 font-medium">Loading settings...</div>;
+  if (!settings) return <div className="p-8 text-center text-xs text-slate-400 font-medium">{t('Loading settings...')}</div>;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings & Company Profile</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Settings & Company Profile')}</h1>
         <p className="text-xs text-slate-500 font-medium mt-0.5">
-          Configure company parameters, GST invoicing rules, and demo database state
+          {t('Configure company parameters, GST invoicing rules, and demo database state')}
         </p>
       </div>
 
@@ -80,12 +82,12 @@ export const SettingsPage: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3">
             <Building className="w-4 h-4 text-blue-600" />
-            <span>Company Profile Details</span>
+            <span>{t('Company Profile Details')}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Company Registered Name</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Company Registered Name')}</label>
               <input
                 type="text"
                 required
@@ -96,7 +98,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">GSTIN Tax ID</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('GSTIN Tax ID')}</label>
               <input
                 type="text"
                 required
@@ -109,7 +111,7 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Official Phone Number</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Official Phone Number')}</label>
               <input
                 type="text"
                 required
@@ -120,7 +122,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Official Email Address</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Official Email Address')}</label>
               <input
                 type="email"
                 required
@@ -132,7 +134,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Registered Factory / Office Address</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Registered Factory / Office Address')}</label>
             <textarea
               rows={2}
               value={settings.address}
@@ -146,12 +148,12 @@ export const SettingsPage: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3">
             <SettingsIcon className="w-4 h-4 text-purple-600" />
-            <span>Invoicing & Tax Parameters</span>
+            <span>{t('Invoicing & Tax Parameters')}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Prefix</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Invoice Prefix')}</label>
               <input
                 type="text"
                 required
@@ -162,7 +164,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Default GST Rate (%)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Default GST Rate (%)')}</label>
               <input
                 type="number"
                 required
@@ -173,15 +175,15 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Default Client Price Category</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Default Client Price Category')}</label>
               <select
                 value={settings.defaultPriceCategory}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSettingsState({ ...settings, defaultPriceCategory: e.target.value as any })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="A">Category A (Standard)</option>
-                <option value="B">Category B (Wholesale)</option>
-                <option value="C">Category C (Special)</option>
+                <option value="A">{t('Category A (Standard)')}</option>
+                <option value="B">{t('Category B (Wholesale)')}</option>
+                <option value="C">{t('Category C (Special)')}</option>
               </select>
             </div>
           </div>
@@ -194,7 +196,7 @@ export const SettingsPage: React.FC = () => {
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+            <span>{saving ? t('Saving...') : t('Save Settings')}</span>
           </button>
         </div>
       </form>
@@ -203,7 +205,7 @@ export const SettingsPage: React.FC = () => {
       <div className="bg-amber-50/60 p-6 rounded-3xl border border-amber-200 space-y-3">
         <div className="flex items-center space-x-2 text-xs font-bold text-amber-900 uppercase tracking-wider">
           <Database className="w-4 h-4 text-amber-600" />
-          <span>Demo Database Control</span>
+          <span>{t('Demo Database Control')}</span>
         </div>
         <p className="text-xs text-amber-800">
           Reset all database collections (customers, products, orders, expenses, dispatches) to the reference application's initial demo seed dataset.
@@ -212,7 +214,7 @@ export const SettingsPage: React.FC = () => {
           onClick={handleResetSeed}
           className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
         >
-          Reset Demo Seed Data
+          {t('Reset Demo Seed Data')}
         </button>
       </div>
     </div>

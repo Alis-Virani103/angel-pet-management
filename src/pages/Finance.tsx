@@ -19,6 +19,7 @@ import {
   CalendarDays,
   RefreshCw
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface FinanceProps {
   onOpenRecordPaymentModal: () => void;
@@ -68,6 +69,7 @@ export const Finance: React.FC<FinanceProps> = ({
   onOpenRecordPaymentModal,
   onOpenAddExpenseModal
 }) => {
+  const { t } = useTranslation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -207,13 +209,13 @@ export const Finance: React.FC<FinanceProps> = ({
   };
 
   const partyOptions = partyType === 'customer'
-    ? [{ id: ALL_PARTIES_ID, name: 'All Customers', contact: '', phone: '' }, ...customers
+    ? [{ id: ALL_PARTIES_ID, name: t('All Customers'), contact: '', phone: '' }, ...customers
         .filter((customer) => {
           const query = partySearch.trim().toLowerCase();
           return !query || customer.company.toLowerCase().includes(query) || customer.name.toLowerCase().includes(query) || customer.phone.toLowerCase().includes(query);
         })
         .map((customer) => ({ id: customer.id, name: customer.company || customer.name, contact: customer.name, phone: customer.phone }))]
-    : [{ id: ALL_PARTIES_ID, name: 'All Suppliers', contact: '', phone: '' }, ...Array.from(new Set(purchases.map((purchase) => purchase.supplierName).filter(Boolean)))
+    : [{ id: ALL_PARTIES_ID, name: t('All Suppliers'), contact: '', phone: '' }, ...Array.from(new Set(purchases.map((purchase) => purchase.supplierName).filter(Boolean)))
         .filter((supplier) => supplier.toLowerCase().includes(partySearch.trim().toLowerCase()))
         .map((supplier) => ({ id: supplier, name: supplier, contact: '', phone: '' }))];
 
@@ -382,7 +384,7 @@ export const Finance: React.FC<FinanceProps> = ({
       {/* Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Finance & Accounting</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">{t('Finance & Accounting')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             Cash flows, customer collections, outstanding balances, and factory expenses
           </p>
@@ -470,7 +472,7 @@ export const Finance: React.FC<FinanceProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Party-wise Statement
+              {t('Party-wise Statement')}
             </button>
             <button
               onClick={() => setActiveTab('statement')}
@@ -480,7 +482,7 @@ export const Finance: React.FC<FinanceProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Sales &amp; Purchase Statement
+              {t('Sales & Purchase Statement')}
             </button>
             <button
               onClick={() => setActiveTab('collections')}
@@ -490,7 +492,7 @@ export const Finance: React.FC<FinanceProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Customer Payment Receipts ({payments.length})
+              {t('Customer Payment Receipts')} ({payments.length})
             </button>
             <button
               onClick={() => setActiveTab('expenses')}
@@ -500,7 +502,7 @@ export const Finance: React.FC<FinanceProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Expense Vouchers ({expenses.length})
+              {t('Expense Vouchers')} ({expenses.length})
             </button>
           </div>
         </div>
@@ -509,27 +511,27 @@ export const Finance: React.FC<FinanceProps> = ({
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Party Type</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Party Type')}</div>
                 <select value={partyType} onChange={(event) => { const nextType = event.target.value as PartyType; const firstSupplier = purchases.find((purchase) => purchase.supplierName)?.supplierName || ''; setPartyType(nextType); setSelectedPartyId(nextType === 'customer' ? customers[0]?.id || '' : firstSupplier); }} className="mt-2 w-full px-3 py-2 bg-white text-xs font-semibold rounded-lg border border-slate-200">
-                  <option value="customer">Customer</option>
-                  <option value="supplier">Supplier</option>
+                  <option value="customer">{t('Customer')}</option>
+                  <option value="supplier">{t('Supplier')}</option>
                 </select>
               </div>
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 sm:col-span-2 lg:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Party</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Party')}</div>
                   <div className="relative w-48">
                     <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input value={partySearch} onChange={(event) => setPartySearch(event.target.value)} placeholder="Search party" className="w-full pl-8 pr-2 py-1.5 text-xs bg-white rounded-lg border border-slate-200" />
                   </div>
                 </div>
                 <select value={selectedPartyId} onChange={(event) => setSelectedPartyId(event.target.value)} className="mt-2 w-full px-3 py-2 bg-white text-xs font-semibold rounded-lg border border-slate-200">
-                  <option value="">Select {partyType}</option>
+                  <option value="">{t('Select')} {partyType === 'customer' ? t('Customer') : t('Supplier')}</option>
                   {partyOptions.map((party) => <option key={party.id} value={party.id}>{party.name}{party.contact ? ` - ${party.contact}` : ''}</option>)}
                 </select>
               </div>
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date Range</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Date Range')}</div>
                 <select value={partyDateFilter} onChange={(event) => setPartyDateFilter(event.target.value as typeof partyDateFilter)} className="mt-2 w-full px-3 py-2 bg-white text-xs font-semibold rounded-lg border border-slate-200">
                   <option value="all">All Dates</option>
                   <option value="today">Today</option>
@@ -546,7 +548,7 @@ export const Finance: React.FC<FinanceProps> = ({
                 <div className="text-base font-bold text-slate-900 mt-1">{isAllParties ? `All ${partyType === 'customer' ? 'Customers' : 'Suppliers'}` : partyType === 'customer' ? selectedCustomer?.company || selectedCustomer?.name : selectedSupplier}</div>
                 <div className="text-xs text-slate-500 mt-1">{isAllParties ? `Combined ${partyType === 'customer' ? 'customer' : 'supplier'} transactions` : partyType === 'customer' ? `${selectedCustomer?.name || ''}${selectedCustomer?.phone ? ` · ${selectedCustomer.phone}` : ''}` : 'Supplier'} · {partyType === 'customer' ? 'Customer' : 'Supplier'}</div>
                 </div>
-                <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800"><Printer className="w-3.5 h-3.5" /> Print Statement</button>
+                <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800"><Printer className="w-3.5 h-3.5" /> {t('Print Statement')}</button>
               </div>
             )}
 
@@ -624,9 +626,9 @@ export const Finance: React.FC<FinanceProps> = ({
                 <button
                   onClick={() => window.print()}
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50"
-                  title="Print statement"
+                  title={t('Print statement')}
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print
+                  <Printer className="w-3.5 h-3.5" /> {t('Print')}
                 </button>
                 <button
                   onClick={loadFinanceData}

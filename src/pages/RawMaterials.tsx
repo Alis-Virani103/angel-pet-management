@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { ShoppingBag, ArrowRight } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface RawMaterialsProps {
   onOpenAddRawMaterialModal: (material?: RawMaterial) => void;
@@ -24,6 +25,7 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
   onOpenRecordMaterialUsageModal,
   onOpenNewPurchaseModal
 }) => {
+  const { t, confirm } = useTranslation();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [usageLogs, setUsageLogs] = useState<RawMaterialUsage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +49,7 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this raw material item?')) {
+    if (confirm('Are you sure you want to delete this raw material item?')) {
       try {
         await deleteRawMaterial(id);
         loadRawMaterialsData();
@@ -72,9 +74,9 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
       {/* Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Raw Materials Inventory</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Raw Materials Inventory')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Stock levels are automatically maintained from Purchases incoming receipts
+            {t('Stock levels are automatically maintained from Purchases incoming receipts')}
           </p>
         </div>
 
@@ -85,7 +87,7 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
               className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center space-x-1.5"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>Record Purchase</span>
+              <span>{t('Record Purchase')}</span>
             </button>
           )}
           <button
@@ -93,14 +95,14 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
             className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-colors flex items-center space-x-1.5"
           >
             <MinusCircle className="w-4 h-4 text-amber-400" />
-            <span>Record Usage</span>
+            <span>{t('Record Usage')}</span>
           </button>
           <button
             onClick={() => onOpenAddRawMaterialModal()}
             className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Item</span>
+            <span>{t('Add Item')}</span>
           </button>
         </div>
       </div>
@@ -109,15 +111,15 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Raw Material Inventory</h2>
-            <p className="text-xs text-slate-500">Live stock tracking and low-material warning limits</p>
+            <h2 className="text-base font-bold text-slate-900">{t('Raw Material Inventory')}</h2>
+            <p className="text-xs text-slate-500">{t('Live stock tracking and low-material warning limits')}</p>
           </div>
 
           <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search granules or codes..."
+              placeholder={t('Search granules or codes...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white"
@@ -129,15 +131,15 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3.5 px-4">Material Name</th>
-                <th className="py-3.5 px-4">Code</th>
-                <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Current Stock</th>
-                <th className="py-3.5 px-4">Minimum Stock</th>
-                <th className="py-3.5 px-4">Unit Cost</th>
-                <th className="py-3.5 px-4">Supplier</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+                <th className="py-3.5 px-4">{t('Material Name')}</th>
+                <th className="py-3.5 px-4">{t('Code')}</th>
+                <th className="py-3.5 px-4">{t('Category')}</th>
+                <th className="py-3.5 px-4">{t('Current Stock')}</th>
+                <th className="py-3.5 px-4">{t('Minimum Stock')}</th>
+                <th className="py-3.5 px-4">{t('Unit Cost')}</th>
+                <th className="py-3.5 px-4">{t('Supplier')}</th>
+                <th className="py-3.5 px-4">{t('Status')}</th>
+                <th className="py-3.5 px-4 text-right">{t('Actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -164,14 +166,14 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
                         <button
                           onClick={() => onOpenAddRawMaterialModal(m)}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          title="Edit Raw Material"
+                          title={t('Edit Raw Material')}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(m.id)}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Delete Raw Material"
+                          title={t('Delete Raw Material')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -188,26 +190,26 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
       {/* Usage History Section */}
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Raw Material Usage History</h2>
-          <p className="text-xs text-slate-500">Log of raw material consumption per production batch</p>
+          <h2 className="text-base font-bold text-slate-900">{t('Raw Material Usage History')}</h2>
+          <p className="text-xs text-slate-500">{t('Log of raw material consumption per production batch')}</p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Material Name</th>
-                <th className="py-3 px-4">Quantity Used</th>
-                <th className="py-3 px-4">Production Batch</th>
-                <th className="py-3 px-4">Notes</th>
+                <th className="py-3 px-4">{t('Date')}</th>
+                <th className="py-3 px-4">{t('Material Name')}</th>
+                <th className="py-3 px-4">{t('Quantity Used')}</th>
+                <th className="py-3 px-4">{t('Production Batch')}</th>
+                <th className="py-3 px-4">{t('Notes')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {usageLogs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-400">
-                    No material usage recorded yet.
+                    {t('No material usage recorded yet.')}
                   </td>
                 </tr>
               ) : (

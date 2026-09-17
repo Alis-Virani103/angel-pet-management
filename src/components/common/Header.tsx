@@ -19,6 +19,7 @@ import {
   Menu
 } from 'lucide-react';
 import { seedDatabase } from '../../services/db';
+import { useTranslation } from '../../i18n';
 
 interface HeaderProps {
   collapsed: boolean;
@@ -43,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAddFinishedGoodsModal,
   onOpenNewPurchaseModal
 }) => {
+  const { language, setLanguage, t } = useTranslation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -59,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleResetData = async () => {
     await seedDatabase(true);
-    setResetMessage('Database reset to reference demo data!');
+    setResetMessage(t('Database reset to reference demo data!'));
     setTimeout(() => {
       setResetMessage('');
       window.location.reload();
@@ -78,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onToggleMobileMenu}
           className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors shrink-0"
-          title="Open menu"
+          title={t('Open menu')}
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -88,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search orders..."
+            placeholder={t('Search orders...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -98,6 +100,18 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Actions & User Controls */}
       <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+          <span className="hidden lg:inline">{t('Language')}</span>
+          <select
+            aria-label={t('Select language')}
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as 'en' | 'gu')}
+            className="px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="en">English</option>
+            <option value="gu">ગુજરાતી</option>
+          </select>
+        </label>
         {/* Quick Action Dropdown */}
         <div className="relative">
           <button
@@ -105,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-sm shadow-blue-500/30 transition-colors"
           >
             <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Create New</span>
+            <span className="hidden sm:inline">{t('Create New')}</span>
             <ChevronDown className="w-3.5 h-3.5 opacity-80 shrink-0" />
           </button>
 
@@ -116,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseLeave={() => setShowQuickActions(false)}
             >
               <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Quick Actions
+                {t('Quick Actions')}
               </div>
               <button
                 onClick={() => {
@@ -126,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <ShoppingCart className="w-4 h-4 text-blue-600" />
-                <span>New Sales Order</span>
+                <span>{t('New Sales Order')}</span>
               </button>
               <button
                 onClick={() => {
@@ -136,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <ShoppingBag className="w-4 h-4 text-indigo-600" />
-                <span>New Purchase Entry</span>
+                <span>{t('New Purchase Entry')}</span>
               </button>
               <button
                 onClick={() => {
@@ -146,7 +160,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <User className="w-4 h-4 text-emerald-600" />
-                <span>Add Customer</span>
+                <span>{t('Add Customer')}</span>
               </button>
               <button
                 onClick={() => {
@@ -156,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <Boxes className="w-4 h-4 text-purple-600" />
-                <span>Add Finished Goods Stock</span>
+                <span>{t('Add Finished Goods Stock')}</span>
               </button>
               <button
                 onClick={() => {
@@ -166,7 +180,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <IndianRupee className="w-4 h-4 text-amber-600" />
-                <span>Record Payment</span>
+                <span>{t('Record Payment')}</span>
               </button>
               <button
                 onClick={() => {
@@ -176,7 +190,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center space-x-2.5 text-xs text-slate-700 font-medium"
               >
                 <Truck className="w-4 h-4 text-sky-600" />
-                <span>New Dispatch</span>
+                <span>{t('New Dispatch')}</span>
               </button>
             </div>
           )}

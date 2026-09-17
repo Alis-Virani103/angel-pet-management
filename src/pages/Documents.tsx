@@ -8,6 +8,7 @@ import {
   Search,
   Plus,
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface DocumentsProps {
   onOpenUploadDocumentModal: () => void;
@@ -16,6 +17,7 @@ interface DocumentsProps {
 export const Documents: React.FC<DocumentsProps> = ({
   onOpenUploadDocumentModal,
 }) => {
+  const { t } = useTranslation();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,7 +90,7 @@ export const Documents: React.FC<DocumentsProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Documents Workspace
+            {t('Documents Workspace')}
           </h1>
 
           <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -102,7 +104,7 @@ export const Documents: React.FC<DocumentsProps> = ({
           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center gap-2 self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
-          <span>Upload Document</span>
+          <span>{t('Upload Document')}</span>
         </button>
       </div>
 
@@ -122,7 +124,7 @@ export const Documents: React.FC<DocumentsProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
               }`}
             >
-              {category.label}
+              {t(category.label)}
             </button>
           ))}
         </div>
@@ -133,7 +135,7 @@ export const Documents: React.FC<DocumentsProps> = ({
 
           <input
             type="text"
-            placeholder="Search documents..."
+            placeholder={t('Search documents...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
@@ -148,7 +150,7 @@ export const Documents: React.FC<DocumentsProps> = ({
             <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
 
             <p className="text-xs text-slate-400 font-medium">
-              Loading documents...
+              {t('Loading documents...')}
             </p>
           </div>
         </div>

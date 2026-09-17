@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   X
 } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onCloseMobile
 }) => {
+  const { t } = useTranslation();
   return (
     <>
       {/* Mobile Drawer Overlay Backdrop */}
@@ -74,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(!collapsed || mobileOpen) && (
               <div className="flex flex-col truncate">
                 <span className="font-bold text-white text-base tracking-tight truncate">ANGEL PET</span>
-                <span className="text-[11px] text-blue-400 font-medium tracking-wide uppercase">Packaging ERP</span>
+                <span className="text-[11px] text-blue-400 font-medium tracking-wide uppercase">{t('Packaging ERP')}</span>
               </div>
             )}
           </div>
@@ -83,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onToggleCollapse}
             className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none"
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={t(collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           </button>
@@ -114,10 +116,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                   }`
                 }
-                title={collapsed && !mobileOpen ? item.label : undefined}
+                title={collapsed && !mobileOpen ? t(item.label) : undefined}
               >
                 <Icon className="w-5 h-5 shrink-0" />
-                {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
+                {(!collapsed || mobileOpen) && <span className="truncate">{t(item.label)}</span>}
               </NavLink>
             );
           })}
@@ -131,9 +133,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {(!collapsed || mobileOpen) && (
               <div className="flex flex-col truncate">
-                <span className="text-xs font-semibold text-slate-200 truncate">Admin Owner</span>
+                <span className="text-xs font-semibold text-slate-200 truncate">{t('Admin Owner')}</span>
                 <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
-                  <ShieldCheck className="w-3 h-3" /> System Admin
+                  <ShieldCheck className="w-3 h-3" /> {t('System Admin')}
                 </span>
               </div>
             )}
