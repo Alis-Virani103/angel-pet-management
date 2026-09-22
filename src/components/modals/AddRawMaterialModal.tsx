@@ -115,23 +115,23 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Material Name</label>
+            <label className="form-label">Material Name</label>
             <input
               type="text"
               required
               placeholder="e.g. PET Granules Grade A"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+            <label className="form-label">Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as RawMaterialCategory)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="granules">Plastic Polymers / Granules</option>
               <option value="masterbatch">Masterbatch</option>
@@ -143,57 +143,57 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Material Code / SKU</label>
+            <label className="form-label">Material Code / SKU</label>
             <input
               type="text"
               placeholder="e.g. PET-GRA-01"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Supplier Name</label>
+            <label className="form-label">Supplier Name</label>
             <input
               type="text"
               placeholder="e.g. Reliance Polymers Ltd"
               value={supplier}
               onChange={(e) => setSupplier(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Current Stock</label>
+            <label className="form-label">Current Stock</label>
             <input
               type="number"
               required
               value={currentStock}
               onChange={(e) => setCurrentStock(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Minimum Alert Stock</label>
+            <label className="form-label">Minimum Alert Stock</label>
             <input
               type="number"
               required
               value={minimumStock}
               onChange={(e) => setMinimumStock(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Unit</label>
+            <label className="form-label">Unit</label>
             <select
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="kg">kg</option>
               <option value="tons">tons</option>
@@ -205,29 +205,29 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Unit Cost (₹)</label>
+          <label className="form-label">Unit Cost (₹)</label>
           <input
             type="number"
             step="0.01"
             required
             value={unitCost}
             onChange={(e) => setUnitCost(parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-input font-semibold"
           />
         </div>
 
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-md shadow-slate-900/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary"
           >
             <Layers className="w-4 h-4" />
             <span>{loading ? 'Saving...' : initialMaterial ? 'Update Material' : 'Add Material'}</span>

@@ -75,7 +75,7 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
       alert('No products to export.');
       return;
     }
-    const headers = ['ID', 'Name', 'SKU', 'Type', 'Size/Spec', 'Price A', 'Price B', 'Price C', 'Stock', 'Unit', 'Status'];
+    const headers = ['ID', 'Name', 'SKU', 'Type', 'Size/Spec', 'Price A', 'Price B', 'Price C', 'Stock', 'Unit', 'Units per Packet', 'Status'];
     const csvRows = [
       headers.join(','),
       ...filteredProducts.map((p) =>
@@ -90,6 +90,7 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
           p.priceC,
           p.currentStock,
           `"${p.unit}"`,
+          p.unitsPerPacket || '',
           `"${p.status}"`
         ].join(',')
       )
@@ -349,6 +350,12 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
                         {p.dimensions || `${p.currentStock.toLocaleString()} ${p.unit}`}
                       </span>
                     </div>
+                    {typeof p.unitsPerPacket === 'number' && p.unitsPerPacket > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-slate-400 font-medium text-[10px] block">Units per Packet</span>
+                        <span className="font-semibold text-slate-800">{p.unitsPerPacket.toLocaleString()} units</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Card Bottom: Unit Price & Actions */}

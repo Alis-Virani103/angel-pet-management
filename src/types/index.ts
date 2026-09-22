@@ -32,6 +32,7 @@ export interface Product {
   currentStock: number;
   minimumStock: number;
   unit: string; // 'pcs', 'units', etc.
+  unitsPerPacket?: number; // optional; positive whole units in one packet/box
   status: ProductStatus;
   createdAt: string;
   imageUrl?: string;
@@ -52,8 +53,11 @@ export interface OrderItem {
   productType: ProductType;
   priceCategory: PriceCategory;
   unitPrice: number;
-  quantity: number;
+  quantity: number; // always total individual units
   subtotal: number;
+  soldByPacket?: boolean;
+  packetCount?: number;
+  unitsPerPacket?: number;
 }
 
 export interface SignedOrderCopy {

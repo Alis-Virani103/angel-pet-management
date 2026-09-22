@@ -31,6 +31,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [currentStock, setCurrentStock] = useState<number>(1000);
   const [minimumStock, setMinimumStock] = useState<number>(500);
   const [unit, setUnit] = useState('pcs');
+  const [unitsPerPacket, setUnitsPerPacket] = useState('');
   const [status, setStatus] = useState<ProductStatus>('active');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
@@ -52,6 +53,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setCurrentStock(initialProduct.currentStock || 0);
         setMinimumStock(initialProduct.minimumStock || 0);
         setUnit(initialProduct.unit || 'pcs');
+        setUnitsPerPacket(
+          typeof initialProduct.unitsPerPacket === 'number' && initialProduct.unitsPerPacket > 0
+            ? String(initialProduct.unitsPerPacket)
+            : ''
+        );
         setStatus(initialProduct.status || 'active');
         setImagePreview(initialProduct.imageUrl || '');
       } else {
@@ -66,6 +72,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setCurrentStock(1000);
         setMinimumStock(500);
         setUnit('pcs');
+        setUnitsPerPacket('');
         setStatus('active');
         setImagePreview('');
       }
@@ -93,6 +100,17 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     if ([priceA, priceB, priceC, currentStock, minimumStock].some((value) => !Number.isFinite(value) || value < 0)) {
       setError('Prices and stock values must be valid non-negative numbers.');
       return;
+    }
+
+    const packetInput = unitsPerPacket.trim();
+    let parsedUnitsPerPacket: number | undefined;
+    if (packetInput !== '') {
+      const parsed = Number(packetInput);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        setError('Units per Packet must be a positive whole number.');
+        return;
+      }
+      parsedUnitsPerPacket = parsed;
     }
 
     setLoading(true);
@@ -125,6 +143,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           currentStock: Number(currentStock),
           minimumStock: Number(minimumStock),
           unit,
+          unitsPerPacket: parsedUnitsPerPacket,
           status
         } as Partial<Product>;
         if (imageFile) {
@@ -145,6 +164,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           currentStock: Number(currentStock),
           minimumStock: Number(minimumStock),
           unit,
+          ...(parsedUnitsPerPacket ? { unitsPerPacket: parsedUnitsPerPacket } : {}),
           status,
           imageUrl: finalImageUrl,
           cloudinaryPublicId: finalPublicId
@@ -212,11 +232,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Product Category</label>
+            <label className="form-label">Product Category</label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value as ProductType)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="bottle">Bottle</option>
               <option value="cap">Cap</option>
@@ -224,32 +244,32 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Product Name</label>
+            <label className="form-label">Product Name</label>
             <input
               type="text"
               required
               placeholder={type === 'bottle' ? 'e.g. 750ml Bottle' : 'e.g. 38mm Flip Cap'}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">SKU Code</label>
+            <label className="form-label">SKU Code</label>
             <input
               type="text"
               placeholder="e.g. BTL-750"
               value={sku}
               onChange={(e) => setSku(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="form-label">
               {type === 'bottle' ? 'Volume / Size Spec' : 'Neck Type / Thread Spec'}
             </label>
             <input
@@ -257,7 +277,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               placeholder={type === 'bottle' ? '750 ml' : '38 mm neck'}
               value={sizeOrType}
               onChange={(e) => setSizeOrType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
         </div>
@@ -267,94 +287,108 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
             Price Tiers (A / B / C per unit)
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Price A (Standard ₹)</label>
+              <label className="form-label">Price A (Standard ₹)</label>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={priceA}
                 onChange={(e) => setPriceA(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="form-input bg-white"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Price B (Wholesale ₹)</label>
+              <label className="form-label">Price B (Wholesale ₹)</label>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={priceB}
                 onChange={(e) => setPriceB(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="form-input bg-white"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Price C (Special ₹)</label>
+              <label className="form-label">Price C (Special ₹)</label>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={priceC}
                 onChange={(e) => setPriceC(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="form-input bg-white"
               />
             </div>
           </div>
         </div>
 
         {/* Stock & Unit */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Current Stock</label>
+            <label className="form-label">Current Stock</label>
             <input
               type="number"
               value={currentStock}
               onChange={(e) => setCurrentStock(parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Minimum Alert Stock</label>
+            <label className="form-label">Minimum Alert Stock</label>
             <input
               type="number"
               value={minimumStock}
               onChange={(e) => setMinimumStock(parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Unit</label>
+            <label className="form-label">Unit</label>
             <select
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="pcs">pcs</option>
               <option value="units">units</option>
               <option value="boxes">boxes</option>
             </select>
           </div>
+
+          <div>
+            <label className="form-label">Units per Packet (Optional)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="e.g. 100"
+              value={unitsPerPacket}
+              onChange={(e) => setUnitsPerPacket(e.target.value.replace(/\D/g, ''))}
+              className="form-input"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">Leave empty if this product is not sold in packets.</p>
+          </div>
         </div>
 
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary"
           >
             <Package className="w-4 h-4" />
-            <span>{loading ? uploadStatusText || 'Saving...' : initialProduct ? 'Update Product' : 'Add Product'}</span>
+            <span>{loading ? (uploadStatusText || 'Saving...') : initialProduct ? 'Update Product' : 'Add Product'}</span>
           </button>
         </div>
       </form>

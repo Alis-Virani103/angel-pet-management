@@ -3,25 +3,20 @@ import { RawMaterial, RawMaterialUsage } from '../types';
 import { getRawMaterials, getRawMaterialUsage, deleteRawMaterial } from '../services/db';
 import { Badge } from '../components/common/Badge';
 import {
-  Layers,
-  Plus,
   MinusCircle,
   Search,
-  Edit,
-  Trash2
+  Trash2,
+  ShoppingBag
 } from 'lucide-react';
-
-import { ShoppingBag, ArrowRight } from 'lucide-react';
 import { useTranslation } from '../i18n';
 
 interface RawMaterialsProps {
-  onOpenAddRawMaterialModal: (material?: RawMaterial) => void;
+  onOpenAddRawMaterialModal?: (material?: RawMaterial) => void;
   onOpenRecordMaterialUsageModal: () => void;
   onOpenNewPurchaseModal?: () => void;
 }
 
 export const RawMaterials: React.FC<RawMaterialsProps> = ({
-  onOpenAddRawMaterialModal,
   onOpenRecordMaterialUsageModal,
   onOpenNewPurchaseModal
 }) => {
@@ -76,7 +71,7 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Raw Materials Inventory')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {t('Stock levels are automatically maintained from Purchases incoming receipts')}
+            {t('Stock levels and raw materials are automatically created & maintained from Purchase entries')}
           </p>
         </div>
 
@@ -96,13 +91,6 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
           >
             <MinusCircle className="w-4 h-4 text-amber-400" />
             <span>{t('Record Usage')}</span>
-          </button>
-          <button
-            onClick={() => onOpenAddRawMaterialModal()}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t('Add Item')}</span>
           </button>
         </div>
       </div>
@@ -163,13 +151,6 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
-                        <button
-                          onClick={() => onOpenAddRawMaterialModal(m)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          title={t('Edit Raw Material')}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
                         <button
                           onClick={() => handleDelete(m.id)}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"

@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Customer, Product, Order, OrderItem, PriceCategory } from '../../types';
 import { getCustomers, getProducts, getOrders, addOrder, addCustomer } from '../../services/db';
-import { ShoppingCart, Check, Plus, AlertCircle, Search } from 'lucide-react';
+import { ShoppingCart, Check, Plus, AlertCircle, Search, Trash2 } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import { calculatePacketUnits, getProductUnitsPerPacket, isPositiveInteger, parsePositiveInteger } from '../../utils/packetUtils';
 
 interface NewOrderModalProps {
   isOpen: boolean;
@@ -16,13 +17,17 @@ interface DraftOrderItem {
   productId: string;
   quantity: number | '';
   rate: string;
+  sellByPacket: boolean;
+  packetCount: number | '';
 }
 
 const createDraftItem = (productId = '', id = `line-${Date.now()}-${Math.random()}`): DraftOrderItem => ({
   id,
   productId,
   quantity: 1000,
-  rate: ''
+  rate: '',
+  sellByPacket: false,
+  packetCount: ''
 });
 
 export const NewOrderModal: React.FC<NewOrderModalProps> = ({
@@ -109,10 +114,15 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const orderItems = items
     .map((item) => {
       const product = products.find((candidate) => candidate.id === item.productId);
-      const quantity = item.quantity === '' ? 0 : item.quantity;
+      const unitsPerPacket = getProductUnitsPerPacket(product);
+      const sellByPacket = Boolean(item.sellByPacket && unitsPerPacket);
+      const packetCount = item.packetCount === '' ? 0 : item.packetCount;
+      const quantity = sellByPacket && unitsPerPacket
+        ? calculatePacketUnits(packetCount, unitsPerPacket)
+        : (item.quantity === '' ? 0 : item.quantity);
       const unitPrice = item.rate === '' ? 0 : Number(item.rate);
       if (!product) return null;
-      return {
+      const orderItem: OrderItem = {
         productId: product.id,
         productName: product.name,
         productType: product.type,
@@ -120,7 +130,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         unitPrice,
         quantity,
         subtotal: unitPrice * quantity
-      } satisfies OrderItem;
+      };
+      if (sellByPacket && unitsPerPacket) {
+        orderItem.soldByPacket = true;
+        orderItem.packetCount = packetCount;
+        orderItem.unitsPerPacket = unitsPerPacket;
+      }
+      return orderItem;
     })
     .filter((item): item is OrderItem => item !== null);
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
@@ -132,9 +148,30 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   };
 
   const handleQuantityChange = (id: string, value: string) => {
-    const digitsOnly = value.replace(/\D/g, '');
-    const normalizedValue = digitsOnly.replace(/^0+(?=\d)/, '');
-    updateItem(id, { quantity: normalizedValue ? Number(normalizedValue) : '' });
+    updateItem(id, { quantity: parsePositiveInteger(value) });
+  };
+
+  const handlePacketCountChange = (id: string, value: string) => {
+    updateItem(id, { packetCount: parsePositiveInteger(value) });
+  };
+
+  const handleSellByPacketToggle = (id: string, enabled: boolean, product?: Product) => {
+    const unitsPerPacket = getProductUnitsPerPacket(product);
+    if (!enabled || !unitsPerPacket) {
+      const current = items.find((item) => item.id === id);
+      const packetCount = current?.packetCount === '' || current?.packetCount == null ? 0 : current.packetCount;
+      const derivedQuantity = current?.sellByPacket && unitsPerPacket
+        ? calculatePacketUnits(packetCount, unitsPerPacket)
+        : (current?.quantity === '' || current?.quantity == null ? 1000 : current.quantity);
+      updateItem(id, { sellByPacket: false, quantity: derivedQuantity || 1000 });
+      return;
+    }
+    const current = items.find((item) => item.id === id);
+    const currentQty = current?.quantity === '' || current?.quantity == null ? 0 : current.quantity;
+    const packetCount = currentQty > 0 && currentQty % unitsPerPacket === 0
+      ? currentQty / unitsPerPacket
+      : 1;
+    updateItem(id, { sellByPacket: true, packetCount });
   };
 
   const handleRateChange = (id: string, value: string) => {
@@ -146,7 +183,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   };
 
   const handleProductSelect = (itemId: string, productId: string) => {
-    updateItem(itemId, { productId });
+    updateItem(itemId, { productId, sellByPacket: false, packetCount: '' });
     setProductSearches((currentSearches) => ({ ...currentSearches, [itemId]: '' }));
     setFocusedProductItemId(null);
   };
@@ -160,8 +197,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       return;
     }
 
-    if (items.some((item) => item.quantity === '' || item.quantity <= 0)) {
-      setError('Please enter a valid positive whole quantity for every item.');
+    if (items.some((item) => {
+      const product = products.find((candidate) => candidate.id === item.productId);
+      const unitsPerPacket = getProductUnitsPerPacket(product);
+      if (item.sellByPacket && unitsPerPacket) {
+        return !isPositiveInteger(item.packetCount);
+      }
+      return item.quantity === '' || !isPositiveInteger(item.quantity);
+    })) {
+      setError('Please enter a valid positive whole quantity. For packet selling, Number of Packets must be a positive whole number.');
+      return;
+    }
+
+    if (items.some((item) => {
+      const product = products.find((candidate) => candidate.id === item.productId);
+      return item.sellByPacket && !getProductUnitsPerPacket(product);
+    })) {
+      setError('Packet selling is only available when the product has a valid Units per Packet value.');
       return;
     }
 
@@ -231,7 +283,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       onClose={onClose}
       title={t('Create New Sales Order')}
       subtitle={t('Build one order with any combination of products')}
-      maxWidth="2xl"
+      maxWidth="4xl"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
@@ -262,7 +314,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               <select
                 value={selectedCustomerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
-                className="w-full px-3 py-2 bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="form-select bg-white"
               >
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -272,37 +324,37 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               </select>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Company Name')}</label>
+                <label className="form-label">{t('Company Name')}</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Acme Pharma"
                   value={newCustomerCompany}
                   onChange={(e) => setNewCustomerCompany(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="form-input bg-white"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Contact Name')}</label>
+                <label className="form-label">{t('Contact Name')}</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. John Doe"
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="form-input bg-white"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Phone')}</label>
+                <label className="form-label">{t('Phone')}</label>
                 <input
                   type="text"
                   placeholder="+91 98980 00000"
                   value={newCustomerPhone}
                   onChange={(e) => setNewCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="form-input bg-white"
                 />
               </div>
             </div>
@@ -319,19 +371,35 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
             <button
               type="button"
               onClick={() => setItems((currentItems) => [...currentItems, createDraftItem()])}
-              className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 shadow-sm shadow-blue-500/20"
             >
               <Plus className="w-3.5 h-3.5" />
               {t('Add Item')}
             </button>
           </div>
 
-          <div className="space-y-2">
+          {/* Desktop Table Header */}
+          <div className="hidden md:grid grid-cols-[minmax(240px,3.5fr)_85px_110px_120px_130px_40px] gap-3 px-3.5 py-2 bg-slate-200/50 rounded-xl text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+            <div>{t('Product Name')}</div>
+            <div>{t('Type')}</div>
+            <div>{t('Quantity')}</div>
+            <div>{t('Rate (₹)')}</div>
+            <div className="text-right">{t('Subtotal (₹)')}</div>
+            <div className="text-center">{t('Action')}</div>
+          </div>
+
+          <div className="space-y-2.5">
             {items.map((item, index) => {
               const product = products.find((candidate) => candidate.id === item.productId);
               const unitPrice = item.rate === '' ? 0 : Number(item.rate);
               const previousRate = getPreviousRate(selectedCustomerId, item.productId);
-              const itemQuantity = item.quantity === '' ? 0 : item.quantity;
+              const unitsPerPacket = getProductUnitsPerPacket(product);
+              const canSellByPacket = Boolean(unitsPerPacket);
+              const sellByPacket = Boolean(item.sellByPacket && unitsPerPacket);
+              const packetCount = item.packetCount === '' ? 0 : item.packetCount;
+              const itemQuantity = sellByPacket && unitsPerPacket
+                ? calculatePacketUnits(packetCount, unitsPerPacket)
+                : (item.quantity === '' ? 0 : item.quantity);
               const productSearch = productSearches[item.id] || '';
               const isProductSearchFocused = focusedProductItemId === item.id;
               const matchingProducts = products.filter((candidate) => {
@@ -342,12 +410,14 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   .some((value) => value.toLowerCase().includes(searchText));
               });
               return (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_90px_110px_110px_minmax(140px,1fr)_auto] gap-2 items-end p-3 bg-white rounded-xl border border-slate-200">
+                <div key={item.id} className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-sm transition-all hover:border-slate-300">
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,3.5fr)_85px_110px_120px_130px_40px] gap-3 items-start">
+                  {/* Product Field */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Product')} {index + 1}</label>
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Product')} {index + 1}</label>
                     <div className="relative">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 w-3.5 h-3.5 -translate-y-1/2 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-slate-400" />
                         <input
                           type="text"
                           role="combobox"
@@ -355,7 +425,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           aria-expanded={isProductSearchFocused}
                           aria-controls={`product-options-${item.id}`}
                           value={isProductSearchFocused ? productSearch : product?.name || ''}
-                          placeholder={product ? `${product.name} (${product.type === 'bottle' ? t('Bottle') : t('Cap')})` : t('Search products')}
+                          placeholder={product ? `${product.name} (${product.type === 'bottle' ? t('Bottle') : t('Cap')})` : t('Search products...')}
                           onFocus={() => {
                             setFocusedProductItemId(item.id);
                             setProductSearches((currentSearches) => ({ ...currentSearches, [item.id]: '' }));
@@ -364,11 +434,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           onBlur={() => {
                             window.setTimeout(() => setFocusedProductItemId((currentId) => currentId === item.id ? null : currentId), 150);
                           }}
-                          className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                          className="w-full h-10 pl-9 pr-3.5 bg-slate-50 text-xs font-semibold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                       {isProductSearchFocused && (
-                        <div id={`product-options-${item.id}`} role="listbox" className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                        <div id={`product-options-${item.id}`} role="listbox" className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
                           {matchingProducts.length > 0 ? matchingProducts.map((candidate) => (
                             <button
                               key={candidate.id}
@@ -377,63 +447,142 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               aria-selected={candidate.id === item.productId}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => handleProductSelect(item.id, candidate.id)}
-                              className={`w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-blue-50 ${candidate.id === item.productId ? 'bg-blue-50 text-blue-700' : 'text-slate-700'}`}
+                              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-colors hover:bg-blue-50 ${candidate.id === item.productId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-800 font-medium'}`}
                             >
-                              <span className="block font-semibold">{candidate.name}</span>
-                              <span className="block text-[10px] text-slate-500">
-                                {candidate.type === 'bottle' ? 'Bottle' : 'Cap'}{candidate.sku ? ` · ${candidate.sku}` : ''} · Stock: {candidate.currentStock.toLocaleString()}
-                              </span>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-900">{candidate.name}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${candidate.type === 'bottle' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {candidate.type === 'bottle' ? 'Bottle' : 'Cap'}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-slate-500">
+                                <span>{candidate.sku ? `SKU: ${candidate.sku}` : candidate.sizeOrType || ''}</span>
+                                <span>Stock: {candidate.currentStock.toLocaleString()} {candidate.unit || 'pcs'}</span>
+                              </div>
                             </button>
                           )) : (
-                            <div className="px-3 py-3 text-xs text-slate-500">{t('No products found')}</div>
+                            <div className="px-3 py-3 text-xs text-slate-500 text-center">{t('No matching products found')}</div>
                           )}
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {/* Type */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Type')}</label>
-                    <div className="px-3 py-2 bg-slate-100 text-xs font-semibold text-slate-600 rounded-xl min-h-[34px]">
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Type')}</label>
+                    <div className="h-10 flex items-center justify-center px-2 bg-slate-100 text-xs font-bold text-slate-700 rounded-xl border border-slate-200/50">
                       {product ? (product.type === 'bottle' ? 'Bottle' : 'Cap') : '-'}
                     </div>
                   </div>
+
+                  {/* Quantity */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Quantity')}</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      required
-                      value={item.quantity === '' ? '' : String(item.quantity)}
-                      onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                    />
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Quantity')}</label>
+                    {sellByPacket ? (
+                      <div className="h-10 flex items-center justify-end px-3 bg-slate-100 text-xs font-bold text-slate-800 rounded-xl border border-slate-200/80">
+                        {itemQuantity.toLocaleString('en-IN')}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        required
+                        value={item.quantity === '' ? '' : String(item.quantity)}
+                        onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                        className="w-full h-10 px-3 bg-slate-50 text-xs font-semibold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    )}
+                    {sellByPacket && (
+                      <div className="text-[10px] font-medium text-slate-500 mt-1">{t('Total Units')}</div>
+                    )}
                   </div>
+
+                  {/* Rate */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Rate')}</label>
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Rate (₹)')}</label>
                     <input
                       type="text"
                       inputMode="decimal"
-                      placeholder="Enter rate"
+                      placeholder="0.00"
                       required
                       value={item.rate}
                       onChange={(e) => handleRateChange(item.id, e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full h-10 px-3 bg-slate-50 text-xs font-semibold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
-                    <div className="text-[10px] text-slate-500 mt-1">{t('Line Subtotal:')} ₹{(unitPrice * itemQuantity).toFixed(2)}</div>
-                    <div className="text-[10px] font-semibold text-amber-700 mt-0.5">
-                      {t('Previous Rate:')} {previousRate === null ? t('No previous rate') : `₹${previousRate.toFixed(2)}`}
+                    <div className="text-[10px] font-medium text-amber-700 mt-1 truncate">
+                      {previousRate === null ? t('New rate') : `Prev: ₹${previousRate.toFixed(2)}`}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    aria-label={`Remove product ${index + 1}`}
-                    disabled={items.length === 1}
-                    onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
-                    className="px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {t('Remove')}
-                  </button>
+
+                  {/* Line Subtotal */}
+                  <div>
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Subtotal (₹)')}</label>
+                    <div className="h-10 flex items-center justify-end px-3 bg-slate-50 text-slate-900 font-bold text-xs rounded-xl border border-slate-200/80">
+                      ₹{(unitPrice * itemQuantity).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
+                  {/* Remove Button */}
+                  <div>
+                    <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">&nbsp;</label>
+                    <button
+                      type="button"
+                      aria-label={`Remove product ${index + 1}`}
+                      disabled={items.length === 1}
+                      onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
+                      className="h-10 w-10 flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200/80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      title={t('Remove item')}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                {canSellByPacket && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-[auto_110px_110px_minmax(0,1fr)] gap-3 items-end">
+                    <label className="flex items-center gap-2 h-10 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={sellByPacket}
+                        onChange={(e) => handleSellByPacketToggle(item.id, e.target.checked, product)}
+                        className="rounded text-blue-600 focus:ring-0"
+                      />
+                      <span>{t('Sell by Packet')}</span>
+                    </label>
+                    {sellByPacket ? (
+                      <>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Number of Packets')}</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={item.packetCount === '' ? '' : String(item.packetCount)}
+                            onChange={(e) => handlePacketCountChange(item.id, e.target.value)}
+                            className="w-full h-10 px-3 bg-slate-50 text-xs font-semibold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Units per Packet')}</label>
+                          <div className="h-10 flex items-center px-3 bg-slate-100 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200/80">
+                            {unitsPerPacket?.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">{t('Total Units')}</label>
+                          <div className="h-10 flex items-center px-3 bg-blue-50 text-xs font-bold text-blue-700 rounded-xl border border-blue-100">
+                            {packetCount} × {unitsPerPacket} = {itemQuantity.toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="md:col-span-3 text-[11px] text-slate-500 h-10 flex items-center">
+                        {t('Enter quantity in units, or check Sell by Packet to convert packets into total units.')}
+                      </p>
+                    )}
+                  </div>
+                )}
                 </div>
               );
             })}
@@ -513,29 +662,29 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Order Notes (Optional)')}</label>
+          <label className="form-label">{t('Order Notes (Optional)')}</label>
           <input
             type="text"
             placeholder="e.g. Special packing or dispatch instructions..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-input"
           />
         </div>
 
         {/* Form Actions */}
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary"
           >
             <ShoppingCart className="w-4 h-4" />
             <span>{loading ? 'Creating Order...' : 'Create Sales Order'}</span>

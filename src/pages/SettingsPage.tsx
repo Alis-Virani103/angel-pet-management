@@ -87,59 +87,59 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Company Registered Name')}</label>
+              <label className="form-label">{t('Company Registered Name')}</label>
               <input
                 type="text"
                 required
                 value={settings.companyName}
                 onChange={(e) => setSettingsState({ ...settings, companyName: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('GSTIN Tax ID')}</label>
+              <label className="form-label">{t('GSTIN Tax ID')}</label>
               <input
                 type="text"
                 required
                 value={settings.gstin}
                 onChange={(e) => setSettingsState({ ...settings, gstin: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Official Phone Number')}</label>
+              <label className="form-label">{t('Official Phone Number')}</label>
               <input
                 type="text"
                 required
                 value={settings.phone}
                 onChange={(e) => setSettingsState({ ...settings, phone: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Official Email Address')}</label>
+              <label className="form-label">{t('Official Email Address')}</label>
               <input
                 type="email"
                 required
                 value={settings.email}
                 onChange={(e) => setSettingsState({ ...settings, email: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Registered Factory / Office Address')}</label>
+            <label className="form-label">{t('Registered Factory / Office Address')}</label>
             <textarea
               rows={2}
               value={settings.address}
               onChange={(e) => setSettingsState({ ...settings, address: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-textarea"
             />
           </div>
         </div>
@@ -153,33 +153,33 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Invoice Prefix')}</label>
+              <label className="form-label">{t('Invoice Prefix')}</label>
               <input
                 type="text"
                 required
                 value={settings.invoicePrefix}
                 onChange={(e) => setSettingsState({ ...settings, invoicePrefix: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Default GST Rate (%)')}</label>
+              <label className="form-label">{t('Default GST Rate (%)')}</label>
               <input
                 type="number"
                 required
                 value={settings.gstRate}
                 onChange={(e) => setSettingsState({ ...settings, gstRate: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-input"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">{t('Default Client Price Category')}</label>
+              <label className="form-label">{t('Default Client Price Category')}</label>
               <select
                 value={settings.defaultPriceCategory}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSettingsState({ ...settings, defaultPriceCategory: e.target.value as any })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                className="form-select"
               >
                 <option value="A">{t('Category A (Standard)')}</option>
                 <option value="B">{t('Category B (Wholesale)')}</option>
@@ -193,7 +193,7 @@ export const SettingsPage: React.FC = () => {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center space-x-2"
+            className="btn-primary"
           >
             <Save className="w-4 h-4" />
             <span>{saving ? t('Saving...') : t('Save Settings')}</span>

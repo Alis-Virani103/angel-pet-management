@@ -79,7 +79,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">
+          <label className="form-label">
             Document Category
           </label>
 
@@ -88,7 +88,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             onChange={(e) =>
               setCategory(e.target.value as DocumentCategory)
             }
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-select"
           >
             <option value="gst">
               GST Registration & Tax Certificates
@@ -105,7 +105,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
 
         {/* File Drag Drop Input */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">
+          <label className="form-label">
             Choose File
           </label>
 
@@ -139,12 +139,12 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+            className="btn-secondary"
           >
             Cancel
           </button>
@@ -152,9 +152,9 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
           <button
             type="submit"
             disabled={loading || !file}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary"
           >
-            <FileText className="w-4 h-4" />
+            <UploadCloud className="w-4 h-4" />
 
             <span>
               {loading ? 'Uploading...' : 'Upload Document'}

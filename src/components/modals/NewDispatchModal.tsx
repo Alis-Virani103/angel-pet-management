@@ -106,11 +106,11 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Select Order for Shipment</label>
+          <label className="form-label">Select Order for Shipment</label>
           <select
             value={selectedOrderId}
             onChange={(e) => setSelectedOrderId(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-select"
           >
             {orders.map((o) => (
               <option key={o.id} value={o.id}>
@@ -133,59 +133,59 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle Number</label>
+            <label className="form-label">Vehicle Number</label>
             <input
               type="text"
               placeholder="e.g. GJ-06-AX-4890"
               value={vehicleNumber}
               onChange={(e) => setVehicleNumber(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Driver Name</label>
+            <label className="form-label">Driver Name</label>
             <input
               type="text"
               placeholder="e.g. Ramesh Patel"
               value={driverName}
               onChange={(e) => setDriverName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Driver Phone</label>
+            <label className="form-label">Driver Phone</label>
             <input
               type="text"
               placeholder="+91 98987 11223"
               value={driverPhone}
               onChange={(e) => setDriverPhone(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Dispatch Date</label>
+            <label className="form-label">Dispatch Date</label>
             <input
               type="date"
               required
               value={dispatchDate}
               onChange={(e) => setDispatchDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Shipment Status</label>
+            <label className="form-label">Shipment Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as DispatchStatus)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="pending">Pending Preparation</option>
               <option value="ready">Ready for Pickup</option>
@@ -196,31 +196,31 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Notes / LR Number</label>
+          <label className="form-label">Delivery Notes / LR Number</label>
           <input
             type="text"
             placeholder="e.g. Lorry Receipt LR-99120 or Gate Pass No."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-input"
           />
         </div>
 
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 transition-colors shadow-md shadow-sky-500/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary !bg-sky-600 hover:!bg-sky-700"
           >
             <Truck className="w-4 h-4" />
-            <span>{loading ? 'Creating...' : 'Create Dispatch'}</span>
+            <span>{loading ? 'Creating...' : 'Log Shipment Entry'}</span>
           </button>
         </div>
       </form>

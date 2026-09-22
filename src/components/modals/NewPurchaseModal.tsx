@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus } from '../../types';
 import { getRawMaterials, addRawMaterial, addPurchase } from '../../services/db';
-import { ShoppingBag, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ShoppingBag, Plus, AlertCircle, CheckCircle2, Search, ChevronDown, Check } from 'lucide-react';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -23,6 +23,136 @@ const createDraftItem = (rawMaterialId = ''): DraftPurchaseItem => ({
   quantity: '1000',
   unitCost: ''
 });
+
+interface SearchableMaterialSelectProps {
+  value: string;
+  materials: RawMaterial[];
+  onChange: (materialId: string) => void;
+  placeholder?: string;
+}
+
+const SearchableMaterialSelect: React.FC<SearchableMaterialSelectProps> = ({
+  value,
+  materials,
+  onChange,
+  placeholder = 'Select material'
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedMaterial = materials.find((m) => m.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  const filteredMaterials = materials.filter((m) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      m.name.toLowerCase().includes(q) ||
+      m.code.toLowerCase().includes(q) ||
+      (m.category && m.category.toLowerCase().includes(q))
+    );
+  });
+
+  const handleSelect = (materialId: string) => {
+    onChange(materialId);
+    setIsOpen(false);
+    setSearchQuery('');
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full min-w-0 px-3 py-2.5 bg-slate-50 hover:bg-white text-xs text-left rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between gap-2 transition-colors"
+      >
+        {selectedMaterial ? (
+          <span className="font-semibold text-slate-800 truncate">
+            {selectedMaterial.name} <span className="text-slate-400 font-normal">({selectedMaterial.code})</span>
+          </span>
+        ) : (
+          <span className="text-slate-400 font-normal">{placeholder}</span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-2 min-w-[260px] animate-in fade-in duration-100">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name or code..."
+              className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 rounded-lg border border-slate-200 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+            {filteredMaterials.length === 0 ? (
+              <div className="p-3 text-center text-slate-400 text-xs font-medium">
+                No materials found {searchQuery ? `matching "${searchQuery}"` : ''}
+              </div>
+            ) : (
+              filteredMaterials.map((m) => {
+                const isSelected = m.id === value;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleSelect(m.id)}
+                    className={`w-full text-left px-2.5 py-2 hover:bg-blue-50/80 rounded-lg transition-colors flex items-center justify-between gap-2 group ${
+                      isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-slate-900 group-hover:text-blue-700 truncate">{m.name}</div>
+                      <div className="text-[10px] text-slate-400 flex items-center gap-2 mt-0.5">
+                        <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-[9px] text-slate-600">{m.code}</span>
+                        <span>Stock: {m.currentStock.toLocaleString()} {m.unit}</span>
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   isOpen,
@@ -52,6 +182,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadMaterials();
+    } else {
+      setItems([createDraftItem()]);
+      setError('');
     }
   }, [isOpen]);
 
@@ -59,15 +192,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     try {
       const matList = await getRawMaterials();
       setMaterials(matList);
-
-      if (matList.length > 0) {
-        setItems((currentItems) => currentItems.map((item, index) => (
-          item.rawMaterialId || index > 0
-            ? item
-            : { ...item, rawMaterialId: matList[0].id, unitCost: String(matList[0].unitCost) }
-        )));
-        setSupplierName((currentSupplier) => currentSupplier || matList[0].supplier || '');
-      }
     } catch (e) {
       console.error('Error loading raw materials:', e);
     }
@@ -96,8 +220,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       unit: material?.unit || newMaterialUnit,
       unitCost,
       quantity,
-      subtotal: quantity * unitCost
-      ,taxRate: includeGst ? 18 : 0
+      subtotal: quantity * unitCost,
+      taxRate: includeGst ? 18 : 0
     };
   });
   const subtotal = purchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
@@ -233,14 +357,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(120px,0.9fr)_minmax(150px,1fr)_minmax(155px,1fr)_auto] gap-x-3 gap-y-3 items-end p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
                   <div className="min-w-0">
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product / Material {index + 1}</label>
-                    <select
+                    <SearchableMaterialSelect
                       value={item.rawMaterialId}
-                      onChange={(e) => handleMaterialChange(item.id, e.target.value)}
-                      className="w-full min-w-0 px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-                    >
-                      <option value="">Select material</option>
-                      {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
-                    </select>
+                      materials={materials}
+                      onChange={(materialId) => handleMaterialChange(item.id, materialId)}
+                      placeholder="Select material"
+                    />
                     <div className="text-[10px] text-slate-400 mt-1.5">{material ? `Stock: ${material.currentStock.toLocaleString()} ${material.unit}` : 'Select a raw material'}</div>
                   </div>
                   <div>

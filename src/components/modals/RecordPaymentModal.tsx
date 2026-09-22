@@ -116,11 +116,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Select Sales Order</label>
+          <label className="form-label">Select Sales Order</label>
           <select
             value={selectedOrderId}
             onChange={(e) => handleOrderChange(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-select"
           >
             {orders.map((o) => {
               const pending = Math.max(0, o.totalAmount - o.paidAmount);
@@ -152,7 +152,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Amount (₹)</label>
+            <label className="form-label">Payment Amount (₹)</label>
             <input
               type="number"
               step="0.01"
@@ -160,16 +160,16 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               max={pendingBalance > 0 ? pendingBalance : undefined}
               value={amount}
               onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-semibold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input font-semibold"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Method</label>
+            <label className="form-label">Payment Method</label>
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-select"
             >
               <option value="bank_transfer">Bank Transfer (NEFT/RTGS)</option>
               <option value="upi">UPI / GPay / PhonePe</option>
@@ -179,40 +179,42 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Date</label>
-          <input
-            type="date"
-            required
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="form-label">Payment Date</label>
+            <input
+              type="date"
+              required
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="form-input"
+            />
+          </div>
+
+          <div>
+            <label className="form-label">Reference / UTR / Cheque Notes</label>
+            <input
+              type="text"
+              placeholder="e.g. UTR129048109 or Bank Reference No."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="form-input"
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Reference / UTR / Cheque Notes</label>
-          <input
-            type="text"
-            placeholder="e.g. UTR129048109 or Bank Reference No."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-500/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary !bg-emerald-600 hover:!bg-emerald-700"
           >
             <IndianRupee className="w-4 h-4" />
             <span>{loading ? 'Recording...' : 'Record Payment'}</span>

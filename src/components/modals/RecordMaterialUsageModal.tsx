@@ -97,11 +97,11 @@ export const RecordMaterialUsageModal: React.FC<RecordMaterialUsageModalProps> =
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Select Raw Material</label>
+          <label className="form-label">Select Raw Material</label>
           <select
             value={selectedMaterialId}
             onChange={(e) => setSelectedMaterialId(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-select"
           >
             {materials.map((m) => (
               <option key={m.id} value={m.id}>
@@ -120,7 +120,7 @@ export const RecordMaterialUsageModal: React.FC<RecordMaterialUsageModalProps> =
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="form-label">
               Quantity Consumed ({selectedMaterial?.unit || 'units'})
             </label>
             <input
@@ -129,59 +129,59 @@ export const RecordMaterialUsageModal: React.FC<RecordMaterialUsageModalProps> =
               required
               value={quantity}
               onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-bold text-slate-900 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input font-bold"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Consumption Date</label>
+            <label className="form-label">Consumption Date</label>
             <input
               type="date"
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+              className="form-input"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Production Batch / Machine Line</label>
+          <label className="form-label">Production Batch / Machine Line</label>
           <input
             type="text"
             placeholder="e.g. BATCH-2026-08-18A"
             value={productionBatch}
             onChange={(e) => setProductionBatch(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-input"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Usage Notes (Optional)</label>
+          <label className="form-label">Usage Notes (Optional)</label>
           <input
             type="text"
             placeholder="e.g. Used for 5,000 units of 1L Bottle molding"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            className="form-input"
           />
         </div>
 
-        <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-md shadow-slate-900/20 disabled:opacity-50 flex items-center space-x-2"
+            className="btn-primary !bg-amber-600 hover:!bg-amber-700"
           >
             <Layers className="w-4 h-4" />
-            <span>{loading ? 'Deducting...' : 'Record Usage'}</span>
+            <span>{loading ? 'Deducting...' : 'Record Consumption'}</span>
           </button>
         </div>
       </form>

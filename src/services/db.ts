@@ -365,11 +365,17 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   let updated: Product | null = null;
   const list = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
   let found = false;
+  const shouldClearUnitsPerPacket = Object.prototype.hasOwnProperty.call(updates, 'unitsPerPacket')
+    && !(typeof updates.unitsPerPacket === 'number' && Number.isInteger(updates.unitsPerPacket) && updates.unitsPerPacket > 0);
   const newList = list.map((item) => {
     if (item.id === id) {
       found = true;
-      updated = { ...item, ...updates };
-      return updated;
+      const nextProduct: Product = { ...item, ...updates };
+      if (shouldClearUnitsPerPacket) {
+        delete nextProduct.unitsPerPacket;
+      }
+      updated = nextProduct;
+      return nextProduct;
     }
     return item;
   });
@@ -377,9 +383,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   setLocalItem(STORAGE_KEYS.PRODUCTS, newList);
 
   if (isLiveFirebaseConfigured && db && updated) {
-    const firebaseUpdates = Object.fromEntries(
+    const firebaseUpdates: Record<string, unknown> = Object.fromEntries(
       Object.entries(updates).filter(([, value]) => value !== undefined)
     );
+    if (shouldClearUnitsPerPacket) {
+      firebaseUpdates.unitsPerPacket = deleteField();
+    }
     try {
       await withTimeout(setDoc(doc(db, 'products', id), firebaseUpdates, { merge: true }), 2500);
     } catch (error) {
@@ -1183,17 +1192,35 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
 
   const materials = await getRawMaterials();
   const additionsByMaterial = new Map<string, number>();
+
   for (const item of purchase.items) {
-    const material = materials.find((m) => m.id === item.rawMaterialId);
+    let material = materials.find((m) => m.id === item.rawMaterialId) ||
+                   materials.find((m) => (m.name || '').trim().toLowerCase() === (item.rawMaterialName || '').trim().toLowerCase());
+
     if (material) {
       const previousAddition = additionsByMaterial.get(material.id) || 0;
       const totalAddition = previousAddition + item.quantity;
       const newStock = material.currentStock + totalAddition;
       await updateRawMaterial(material.id, {
         currentStock: newStock,
+        unitCost: item.unitCost > 0 ? item.unitCost : material.unitCost,
+        supplier: purchase.supplierName || material.supplier,
         lastRestocked: purchase.purchaseDate || new Date().toISOString().split('T')[0]
       });
       additionsByMaterial.set(material.id, totalAddition);
+    } else if (item.rawMaterialName) {
+      const newMat = await addRawMaterial({
+        name: item.rawMaterialName.trim(),
+        code: item.hsnSac || `MAT-${Math.floor(1000 + Math.random() * 9000)}`,
+        category: item.category || 'granules',
+        currentStock: item.quantity,
+        minimumStock: 500,
+        unit: item.unit || 'kg',
+        unitCost: item.unitCost || 0,
+        supplier: purchase.supplierName || 'Direct Supplier'
+      });
+      materials.push(newMat);
+      additionsByMaterial.set(newMat.id, item.quantity);
     }
   }
 

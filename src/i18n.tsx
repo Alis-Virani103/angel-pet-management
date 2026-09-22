@@ -125,6 +125,8 @@ const gujarati: Record<string, string> = {
   'Good Morning, Admin': 'સુપ્રભાત, એડમિન',
   'Finance & Accounting': 'નાણાં વ્યવસ્થા અને હિસાબ',
   'Party-wise Statement': 'પાર્ટી પ્રમાણે સ્ટેટમેન્ટ',
+  'Show Filters': 'ફિલ્ટર્સ બતાવો',
+  'Hide Filters': 'ફિલ્ટર્સ છુપાવો',
   Select: 'પસંદ કરો',
   'Print statement': 'સ્ટેટમેન્ટ પ્રિન્ટ કરો',
   'Total Orders': 'કુલ ઓર્ડર',
@@ -506,6 +508,16 @@ const gujarati: Record<string, string> = {
   , 'Production Batch': 'ઉત્પાદન બેચ'
   , Notes: 'નોંધો'
   , 'No material usage recorded yet.': 'હજુ સુધી કોઈ સામગ્રી વપરાશ નોંધાયો નથી.'
+  , 'Units per Packet (Optional)': 'પેકેટ દીઠ એકમો (વૈકલ્પિક)'
+  , 'Leave empty if this product is not sold in packets.': 'જો આ ઉત્પાદન પેકેટમાં વેચાતું ન હોય તો ખાલી રાખો.'
+  , 'Units per Packet must be a positive whole number.': 'પેકેટ દીઠ એકમો હકારાત્મક પૂર્ણાંક હોવા જોઈએ.'
+  , 'Sell by Packet': 'પેકેટ પ્રમાણે વેચો'
+  , 'Number of Packets': 'પેકેટની સંખ્યા'
+  , 'Units per Packet': 'પેકેટ દીઠ એકમો'
+  , 'Total Units': 'કુલ એકમો'
+  , 'Enter quantity in units, or check Sell by Packet to convert packets into total units.': 'જથ્થો એકમોમાં દાખલ કરો, અથવા પેકેટને કુલ એકમોમાં ફેરવવા માટે Sell by Packet પસંદ કરો.'
+  , 'Please enter a valid positive whole quantity. For packet selling, Number of Packets must be a positive whole number.': 'માન્ય હકારાત્મક પૂર્ણાંક જથ્થો દાખલ કરો. પેકેટ વેચાણ માટે, પેકેટની સંખ્યા હકારાત્મક પૂર્ણાંક હોવી જોઈએ.'
+  , 'Packet selling is only available when the product has a valid Units per Packet value.': 'પેકેટ વેચાણ ત્યારે જ ઉપલબ્ધ છે જ્યારે ઉત્પાદન પાસે માન્ય પેકેટ દીઠ એકમો હોય.'
 };
 
 interface LanguageContextValue {

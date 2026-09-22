@@ -208,7 +208,6 @@ export function App() {
             element={
               <RawMaterials
                 key={`rm-${refreshKey}`}
-                onOpenAddRawMaterialModal={(mat) => openAddRawMaterial(mat)}
                 onOpenRecordMaterialUsageModal={() => setIsRecordMaterialUsageOpen(true)}
                 onOpenNewPurchaseModal={() => setIsNewPurchaseOpen(true)}
               />
@@ -295,15 +294,6 @@ export function App() {
         isOpen={isAddFinishedGoodsOpen}
         onClose={() => setIsAddFinishedGoodsOpen(false)}
         onStockAdded={triggerRefresh}
-      />
-      <AddRawMaterialModal
-        isOpen={isAddRawMaterialOpen}
-        onClose={() => {
-          setIsAddRawMaterialOpen(false);
-          setEditingMaterial(null);
-        }}
-        initialMaterial={editingMaterial}
-        onMaterialAdded={triggerRefresh}
       />
       <RecordMaterialUsageModal
         isOpen={isRecordMaterialUsageOpen}
