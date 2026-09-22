@@ -42,6 +42,7 @@ if (isLiveFirebaseConfigured) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     db = getFirestore(app);
     storage = getStorage(app);
+    console.info('Firebase Firestore and Storage initialized successfully (No Auth mode)');
   } catch (error) {
     console.warn('Firebase initialization warning:', error);
   }

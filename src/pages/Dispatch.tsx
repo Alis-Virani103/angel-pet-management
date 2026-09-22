@@ -343,8 +343,9 @@ export const DispatchPage: React.FC<DispatchProps> = ({ onOpenNewDispatchModal }
               </thead>
               <tbody>
                 {selectedDispatch.items.map((item, idx) => {
-                  // Get product unit from linked order if available
-                  const productUnit = linkedOrder?.items.find(oi => oi.productId === item.productId)?.unitPrice ? 'pcs' : 'pcs';
+                  // Get product unit from linked order if available, otherwise default to 'pcs'
+                  const orderItem = linkedOrder?.items.find(oi => oi.productId === item.productId);
+                  const productUnit = 'pcs'; // Default unit as products are measured in pieces
                   return (
                     <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
                       <td style={{ padding: '7px 10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '600' }}>

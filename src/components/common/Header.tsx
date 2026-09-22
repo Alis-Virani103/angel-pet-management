@@ -8,7 +8,6 @@ import {
   Database,
   CheckCircle2,
   AlertTriangle,
-  LogOut,
   ChevronDown,
   Layers,
   ShoppingCart,

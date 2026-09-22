@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppLayout } from './layouts/AppLayout';
 import { Dashboard } from './pages/Dashboard';
@@ -35,6 +35,7 @@ import { useTranslation } from './i18n';
 
 export function App() {
   const { language } = useTranslation();
+  
   // Global modal state control
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
