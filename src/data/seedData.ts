@@ -163,7 +163,9 @@ export const initialProducts: Product[] = [
     minimumStock: 5000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-201',
+    compatibleInnerId: 'PRD-301'
   },
   {
     id: 'PRD-102',
@@ -181,7 +183,9 @@ export const initialProducts: Product[] = [
     minimumStock: 6000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-201',
+    compatibleInnerId: 'PRD-301'
   },
   {
     id: 'PRD-103',
@@ -199,7 +203,9 @@ export const initialProducts: Product[] = [
     minimumStock: 4000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-201',
+    compatibleInnerId: 'PRD-301'
   },
   {
     id: 'PRD-104',
@@ -217,7 +223,9 @@ export const initialProducts: Product[] = [
     minimumStock: 3000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-203',
+    compatibleInnerId: 'PRD-303'
   },
   {
     id: 'PRD-105',
@@ -235,7 +243,9 @@ export const initialProducts: Product[] = [
     minimumStock: 2500,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-203',
+    compatibleInnerId: 'PRD-303'
   },
   {
     id: 'PRD-106',
@@ -251,7 +261,9 @@ export const initialProducts: Product[] = [
     minimumStock: 1500,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-203',
+    compatibleInnerId: 'PRD-303'
   },
   {
     id: 'PRD-107',
@@ -269,7 +281,9 @@ export const initialProducts: Product[] = [
     minimumStock: 1000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-204',
+    compatibleInnerId: 'PRD-303'
   },
   {
     id: 'PRD-108',
@@ -285,7 +299,9 @@ export const initialProducts: Product[] = [
     minimumStock: 2000,
     unit: 'pcs',
     status: 'active',
-    createdAt: '2026-01-01'
+    createdAt: '2026-01-01',
+    compatibleCapId: 'PRD-201',
+    compatibleInnerId: 'PRD-301'
   },
   {
     id: 'PRD-201',
@@ -363,6 +379,54 @@ export const initialProducts: Product[] = [
     priceC: 2.95,
     currentStock: 16500,
     minimumStock: 4000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-301',
+    name: '28mm Standard Inner',
+    sku: 'INR-28S',
+    type: 'inner',
+    sizeOrType: '28 mm standard',
+    description: '28mm Standard Plastic Inner Liner',
+    priceA: 0.80,
+    priceB: 0.70,
+    priceC: 0.60,
+    currentStock: 50000,
+    minimumStock: 15000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-302',
+    name: '28mm Foam Inner',
+    sku: 'INR-28F',
+    type: 'inner',
+    sizeOrType: '28 mm foam',
+    description: '28mm Foam Inner Liner for Chemical Bottles',
+    priceA: 1.20,
+    priceB: 1.05,
+    priceC: 0.95,
+    currentStock: 35000,
+    minimumStock: 10000,
+    unit: 'pcs',
+    status: 'active',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'PRD-303',
+    name: '38mm Wide Inner',
+    sku: 'INR-38W',
+    type: 'inner',
+    sizeOrType: '38 mm wide',
+    description: '38mm Wide Neck Plastic Inner Liner',
+    priceA: 1.50,
+    priceB: 1.30,
+    priceC: 1.15,
+    currentStock: 22000,
+    minimumStock: 6000,
     unit: 'pcs',
     status: 'active',
     createdAt: '2026-01-01'
@@ -1227,9 +1291,14 @@ export const initialRawMaterials: RawMaterial[] = [
     name: 'PET Granules Grade A',
     code: 'PET-GRA-01',
     category: 'granules',
-    currentStock: 4500,
+    currentStock: 4050,
     minimumStock: 2000,
     unit: 'kg',
+    baseUnit: 'kg',
+    purchaseUnit: 'Bag',
+    consumptionUnit: 'kg',
+    conversionFactor: 50,
+    piecesPerBaseUnit: 20,
     unitCost: 110.00,
     supplier: 'Reliance Polymers Ltd',
     status: 'healthy',
@@ -1243,6 +1312,11 @@ export const initialRawMaterials: RawMaterial[] = [
     currentStock: 1200,
     minimumStock: 1500,
     unit: 'kg',
+    baseUnit: 'kg',
+    purchaseUnit: 'Bag',
+    consumptionUnit: 'kg',
+    conversionFactor: 50,
+    piecesPerBaseUnit: 20,
     unitCost: 125.00,
     supplier: 'IOCL Polymers',
     status: 'low_stock',
@@ -1253,9 +1327,14 @@ export const initialRawMaterials: RawMaterial[] = [
     name: 'Blue Masterbatch',
     code: 'MB-BLU-01',
     category: 'masterbatch',
-    currentStock: 350,
+    currentStock: 338,
     minimumStock: 100,
     unit: 'kg',
+    baseUnit: 'kg',
+    purchaseUnit: 'kg',
+    consumptionUnit: 'kg',
+    conversionFactor: 1,
+    piecesPerBaseUnit: 20,
     unitCost: 280.00,
     supplier: 'Clariant Pigments',
     status: 'healthy',
@@ -1269,6 +1348,11 @@ export const initialRawMaterials: RawMaterial[] = [
     currentStock: 80,
     minimumStock: 150,
     unit: 'boxes',
+    baseUnit: 'pcs',
+    purchaseUnit: 'Carton',
+    consumptionUnit: 'pcs',
+    conversionFactor: 500,
+    piecesPerBaseUnit: 1,
     unitCost: 45.00,
     supplier: 'Surat Packaging Ind',
     status: 'low_stock',
@@ -1282,6 +1366,11 @@ export const initialRawMaterials: RawMaterial[] = [
     currentStock: 65000,
     minimumStock: 20000,
     unit: 'pcs',
+    baseUnit: 'pcs',
+    purchaseUnit: 'Carton',
+    consumptionUnit: 'pcs',
+    conversionFactor: 1000,
+    piecesPerBaseUnit: 1,
     unitCost: 0.15,
     supplier: 'FlexiSeals Tech',
     status: 'healthy',
@@ -1294,21 +1383,35 @@ export const initialRawMaterialUsage: RawMaterialUsage[] = [
     id: 'RMU-1001',
     materialId: 'RM-101',
     materialName: 'PET Granules Grade A',
-    quantity: 450,
-    unit: 'kg',
+    quantity: 8,
+    unit: 'Bag',
+    baseQuantity: 400,
+    baseUnit: 'kg',
+    equivalentPieces: 8000,
+    wastage1: 0.5,
+    wastage2: 0.5,
+    totalDeduction: 9,
     date: '2026-08-16',
     productionBatch: 'BATCH-2026-08-16A',
-    notes: 'Used for 5000 units of 1L Bottle production'
+    notes: 'Used for 5000 units of 1L Bottle production',
+    createdAt: '2026-08-16T15:00:00.000Z'
   },
   {
     id: 'RMU-1002',
     materialId: 'RM-103',
     materialName: 'Blue Masterbatch',
-    quantity: 12,
+    quantity: 10,
     unit: 'kg',
+    baseQuantity: 10,
+    baseUnit: 'kg',
+    equivalentPieces: 200,
+    wastage1: 1,
+    wastage2: 1,
+    totalDeduction: 12,
     date: '2026-08-16',
     productionBatch: 'BATCH-2026-08-16A',
-    notes: 'Color masterbatch blending'
+    notes: 'Color masterbatch blending',
+    createdAt: '2026-08-16T15:30:00.000Z'
   }
 ];
 
@@ -1321,6 +1424,8 @@ export const initialFinishedGoodsLogs: FinishedGoodsLog[] = [
     quantityProduced: 5000,
     unit: 'pcs',
     date: '2026-08-16',
+    source: 'Production',
+    createdAt: '2026-08-16T10:30:00.000Z',
     notes: 'Batch output added to warehouse stock'
   },
   {
@@ -1331,6 +1436,8 @@ export const initialFinishedGoodsLogs: FinishedGoodsLog[] = [
     quantityProduced: 10000,
     unit: 'pcs',
     date: '2026-08-15',
+    source: 'Production',
+    createdAt: '2026-08-15T14:15:00.000Z',
     notes: 'Molding machine #1 output'
   }
 ];
@@ -1398,9 +1505,9 @@ export const initialPurchases: PurchaseOrder[] = [
         rawMaterialId: 'RM-101',
         rawMaterialName: 'PET Granules Grade A',
         category: 'granules',
-        unit: 'kg',
-        unitCost: 110.00,
-        quantity: 2000,
+        unit: 'Bag',
+        unitCost: 5500.00,
+        quantity: 40,
         subtotal: 220000
       }
     ],
@@ -1408,7 +1515,7 @@ export const initialPurchases: PurchaseOrder[] = [
     gstRate: 18,
     gstAmount: 39600,
     totalAmount: 259600,
-    totalQuantity: 2000,
+    totalQuantity: 40,
     status: 'received',
     paymentStatus: 'paid',
     paidAmount: 259600,

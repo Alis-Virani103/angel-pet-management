@@ -335,7 +335,6 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-6">Payment Date</th>
-                  <th className="py-3 px-6">Reference</th>
                   <th className="py-3 px-6">Amount</th>
                   <th className="py-3 px-6">Payment Method</th>
                   <th className="py-3 px-6">Notes</th>
@@ -345,7 +344,6 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
                 {(purchase.paymentRecords || []).map((payment) => (
                   <tr key={payment.id}>
                     <td className="py-3 px-6 text-slate-500">{payment.paymentDate || 'Date unavailable'}</td>
-                    <td className="py-3 px-6 font-semibold text-blue-600">{payment.id}</td>
                     <td className="py-3 px-6 font-semibold text-emerald-700">₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="py-3 px-6 text-slate-500">{payment.paymentMethod ? payment.paymentMethod.replace('_', ' ') : 'Not recorded'}</td>
                     <td className="py-3 px-6 text-slate-500">{payment.notes || '—'}</td>

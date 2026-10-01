@@ -106,6 +106,10 @@ const gujarati: Record<string, string> = {
   Inactive: 'નિષ્ક્રિય',
   'Database reset to reference demo data!': 'ડેટાબેઝ ડેમો ડેટા પર રીસેટ થયું!',
   'All Types': 'બધા પ્રકારો',
+  'Order Type': 'ઓર્ડરનો પ્રકાર',
+  'All Order Types': 'બધા ઓર્ડર પ્રકારો',
+  'Regular Order': 'નિયમિત ઓર્ડર (Regular)',
+  'AS Order': 'AS ઓર્ડર',
   'Order Status': 'ઓર્ડરની સ્થિતિ',
   'Payment Status': 'ચુકવણીની સ્થિતિ',
   'Price Category': 'ભાવ શ્રેણી',
@@ -190,6 +194,12 @@ const gujarati: Record<string, string> = {
   items: 'વસ્તુઓ',
   "use this category's product prices": 'આ શ્રેણીના ઉત્પાદન ભાવ લાગુ પડે છે',
   'No previous rate': 'અગાઉનો દર નથી',
+  'Auto: Category A': 'ઓટો: શ્રેણી A',
+  'Auto: Category B': 'ઓટો: શ્રેણી B',
+  'Auto: Category C': 'ઓટો: શ્રેણી C',
+  'No Price': 'ભાવ નથી',
+  'Rate (₹)': 'દર (₹)',
+  'Stored Rate': 'સંગ્રહિત દર',
   'Low Stock Items': 'ઓછા સ્ટોકની વસ્તુઓ',
   'Amount Collected': 'વસૂલ થયેલી રકમ',
   Received: 'પ્રાપ્ત',
@@ -518,6 +528,26 @@ const gujarati: Record<string, string> = {
   , 'Enter quantity in units, or check Sell by Packet to convert packets into total units.': 'જથ્થો એકમોમાં દાખલ કરો, અથવા પેકેટને કુલ એકમોમાં ફેરવવા માટે Sell by Packet પસંદ કરો.'
   , 'Please enter a valid positive whole quantity. For packet selling, Number of Packets must be a positive whole number.': 'માન્ય હકારાત્મક પૂર્ણાંક જથ્થો દાખલ કરો. પેકેટ વેચાણ માટે, પેકેટની સંખ્યા હકારાત્મક પૂર્ણાંક હોવી જોઈએ.'
   , 'Packet selling is only available when the product has a valid Units per Packet value.': 'પેકેટ વેચાણ ત્યારે જ ઉપલબ્ધ છે જ્યારે ઉત્પાદન પાસે માન્ય પેકેટ દીઠ એકમો હોય.'
+  , 'Day-to-Day Ledger': 'ડે-ટુ-ડે લેજર'
+  , 'Company Day-to-Day Ledger': 'કંપની ડે-ટુ-ડે લેજર'
+  , 'Print Ledger': 'લેજર પ્રિન્ટ કરો'
+  , 'Running Balance': 'ચાલુ બેલેન્સ'
+  , 'Closing Balance': 'અંતિમ બેલેન્સ'
+  , 'Net Balance': 'ચોખ્ખી બેલેન્સ'
+  , 'Total Debit': 'કુલ ઉધાર (ડેબિટ)'
+  , 'Total Credit': 'કુલ જમા (ક્રેડિટ)'
+  , 'Transaction Type': 'વ્યવહાર પ્રકાર'
+  , 'Description': 'વિગત'
+  , 'Sale': 'વેચાણ'
+  , 'Customer Payment': 'ગ્રાહક ચુકવણી'
+  , 'Purchase': 'ખરીદી'
+  , 'Supplier Payment': 'સપ્લાયર ચુકવણી'
+  , 'Expense': 'ખર્ચ'
+  , 'All Transaction Types': 'બધા વ્યવહાર પ્રકાર'
+  , 'Payment Received': 'ચુકવણી પ્રાપ્ત થઈ'
+  , 'Raw Material Purchase': 'કાચા માલની ખરીદી'
+  , 'Factory Expense': 'ફેક્ટરી ખર્ચ'
+  , 'No ledger transactions found for the selected period.': 'પસંદ કરેલા સમયગાળા માટે કોઈ લેજર વ્યવહારો મળ્યા નથી.'
 };
 
 interface LanguageContextValue {

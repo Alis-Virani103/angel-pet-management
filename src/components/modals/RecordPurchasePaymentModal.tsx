@@ -188,7 +188,7 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
 
         <div>
           <label className="form-label">Reference / Notes</label>
-          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. UTR / Bank Transfer Ref" className="form-input" />
+          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="form-input" />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">

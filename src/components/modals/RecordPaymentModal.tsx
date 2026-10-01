@@ -35,18 +35,30 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const loadOrders = async () => {
     try {
       const orderList = await getOrders();
-      setOrders(orderList);
+      // Filter out Cash Memo and AS orders
+      const eligibleOrders = orderList.filter((o) => o.paymentType !== 'cash_memo' && o.orderType !== 'AS');
+      setOrders(eligibleOrders);
+
+      if (defaultOrderId) {
+        const fullOrder = orderList.find((o) => o.id === defaultOrderId);
+        if (fullOrder && fullOrder.orderType === 'AS') {
+          setError('Payment not applicable for AS Order.');
+          setSelectedOrderId('');
+          setAmount(0);
+          return;
+        }
+      }
 
       const target = defaultOrderId
-        ? orderList.find((o) => o.id === defaultOrderId)
-        : orderList.find((o) => o.paymentStatus !== 'paid');
+        ? eligibleOrders.find((o) => o.id === defaultOrderId)
+        : eligibleOrders.find((o) => o.paymentStatus !== 'paid');
 
       if (target) {
         setSelectedOrderId(target.id);
         const pendingAmount = Math.max(0, target.totalAmount - target.paidAmount);
         setAmount(pendingAmount);
-      } else if (orderList.length > 0) {
-        setSelectedOrderId(orderList[0].id);
+      } else if (eligibleOrders.length > 0) {
+        setSelectedOrderId(eligibleOrders[0].id);
       }
     } catch (e) {
       console.error(e);
@@ -67,7 +79,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) {
-      setError('Please select an order.');
+      setError('Please select an eligible order.');
+      return;
+    }
+    if (selectedOrder.orderType === 'AS') {
+      setError('Payment not applicable for AS Order.');
       return;
     }
     if (amount <= 0) {
@@ -195,7 +211,6 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             <label className="form-label">Reference / UTR / Cheque Notes</label>
             <input
               type="text"
-              placeholder="e.g. UTR129048109 or Bank Reference No."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="form-input"

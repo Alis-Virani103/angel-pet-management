@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { RawMaterial, RawMaterialUsage } from '../types';
-import { getRawMaterials, getRawMaterialUsage, deleteRawMaterial } from '../services/db';
+import { RawMaterial, RawMaterialUsage, PurchaseOrder } from '../types';
+import { getRawMaterials, getRawMaterialUsage, deleteRawMaterial, getPurchases } from '../services/db';
 import { Badge } from '../components/common/Badge';
+import { RawMaterialInventoryHistoryModal } from '../components/modals/RawMaterialInventoryHistoryModal';
+import { getStockInBothUnits, formatQuantityWithUnit } from '../utils/unitConversion';
 import {
   MinusCircle,
   Search,
   Trash2,
-  ShoppingBag
+  ShoppingBag,
+  History
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 
@@ -23,8 +26,11 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
   const { t, confirm } = useTranslation();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [usageLogs, setUsageLogs] = useState<RawMaterialUsage[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState<RawMaterial | null>(null);
 
   useEffect(() => {
     loadRawMaterialsData();
@@ -33,9 +39,10 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
   const loadRawMaterialsData = async () => {
     setLoading(true);
     try {
-      const [matList, usgList] = await Promise.all([getRawMaterials(), getRawMaterialUsage()]);
+      const [matList, usgList, purList] = await Promise.all([getRawMaterials(), getRawMaterialUsage(), getPurchases()]);
       setMaterials(matList);
       setUsageLogs(usgList);
+      setPurchases(purList);
     } catch (e) {
       console.error(e);
     } finally {
@@ -125,8 +132,10 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
                 <th className="py-3.5 px-4">{t('Current Stock')}</th>
                 <th className="py-3.5 px-4">{t('Minimum Stock')}</th>
                 <th className="py-3.5 px-4">{t('Unit Cost')}</th>
+                <th className="py-3.5 px-4">{t('Base Unit')}</th>
                 <th className="py-3.5 px-4">{t('Supplier')}</th>
                 <th className="py-3.5 px-4">{t('Status')}</th>
+                <th className="py-3.5 px-4">{t('History')}</th>
                 <th className="py-3.5 px-4 text-right">{t('Actions')}</th>
               </tr>
             </thead>
@@ -139,15 +148,41 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
                     <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">{m.code}</td>
                     <td className="py-3.5 px-4 capitalize text-slate-600">{m.category}</td>
                     <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {m.currentStock.toLocaleString()} {m.unit}
+                      {(() => {
+                        const stock = getStockInBothUnits(m);
+                        if (stock.purchaseUnit !== stock.baseUnit) {
+                          return (
+                            <div>
+                              <div>{formatQuantityWithUnit(stock.baseQuantity, stock.baseUnit)}</div>
+                              <div className="text-[10px] text-slate-400">
+                                ({formatQuantityWithUnit(stock.purchaseQuantity, stock.purchaseUnit)})
+                              </div>
+                            </div>
+                          );
+                        }
+                        return formatQuantityWithUnit(stock.baseQuantity, stock.baseUnit);
+                      })()}
                     </td>
                     <td className="py-3.5 px-4 text-slate-500">
-                      {m.minimumStock.toLocaleString()} {m.unit}
+                      {m.minimumStock.toLocaleString()} {m.baseUnit}
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-900">₹{m.unitCost.toFixed(2)}</td>
+                    <td className="py-3.5 px-4 text-slate-600">{m.baseUnit}</td>
                     <td className="py-3.5 px-4 text-slate-600">{m.supplier}</td>
                     <td className="py-3.5 px-4">
                       <Badge status={isLow ? 'low_stock' : 'healthy'} />
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <button
+                        onClick={() => {
+                          setSelectedMaterial(m);
+                          setHistoryModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        <span>History</span>
+                      </button>
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
@@ -181,15 +216,20 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3 px-4">{t('Date')}</th>
                 <th className="py-3 px-4">{t('Material Name')}</th>
-                <th className="py-3 px-4">{t('Quantity Used')}</th>
-                <th className="py-3 px-4">{t('Production Batch')}</th>
+                <th className="py-3 px-4">{t('Consumed')}</th>
+                <th className="py-3 px-4">{t('Wastage 1')}</th>
+                <th className="py-3 px-4">{t('Wastage 2')}</th>
+                <th className="py-3 px-4">{t('Total')}</th>
+                <th className="py-3 px-4">{t('Converted')}</th>
+                <th className="py-3 px-4">{t('Pieces')}</th>
+                <th className="py-3 px-4">{t('Batch')}</th>
                 <th className="py-3 px-4">{t('Notes')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {usageLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     {t('No material usage recorded yet.')}
                   </td>
                 </tr>
@@ -201,6 +241,45 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
                     <td className="py-3 px-4 font-bold text-amber-600">
                       -{u.quantity.toLocaleString()} {u.unit}
                     </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {u.wastage1 && u.wastage1 > 0 ? (
+                        <span className="text-rose-600">
+                          -{u.wastage1.toLocaleString()} {u.unit}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {u.wastage2 && u.wastage2 > 0 ? (
+                        <span className="text-rose-600">
+                          -{u.wastage2.toLocaleString()} {u.unit}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-slate-900">
+                      -{u.totalDeduction ? u.totalDeduction.toLocaleString() : u.quantity.toLocaleString()} {u.unit}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {u.baseQuantity && u.baseUnit && u.baseQuantity !== u.quantity ? (
+                        <span className="text-blue-600">
+                          -{formatQuantityWithUnit(u.baseQuantity, u.baseUnit)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {u.equivalentPieces && u.equivalentPieces > 0 ? (
+                        <span className="text-purple-600">
+                          {formatQuantityWithUnit(u.equivalentPieces, 'pcs')}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">{u.productionBatch || 'BATCH-001'}</td>
                     <td className="py-3 px-4 text-slate-500">{u.notes || 'Routine production deduction'}</td>
                   </tr>
@@ -210,6 +289,20 @@ export const RawMaterials: React.FC<RawMaterialsProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Raw Material Inventory History Modal */}
+      {selectedMaterial && (
+        <RawMaterialInventoryHistoryModal
+          isOpen={historyModalOpen}
+          onClose={() => {
+            setHistoryModalOpen(false);
+            setSelectedMaterial(null);
+          }}
+          material={selectedMaterial}
+          usageLogs={usageLogs}
+          purchases={purchases}
+        />
+      )}
     </div>
   );
 };

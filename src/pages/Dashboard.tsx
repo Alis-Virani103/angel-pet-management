@@ -16,7 +16,8 @@ import {
   Plus,
   ArrowRight,
   TrendingUp,
-  PackageCheck
+  PackageCheck,
+  Building2
 } from 'lucide-react';
 import {
   AreaChart,
@@ -79,8 +80,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Calculations
-  const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  // Calculations (Exclude AS orders from commercial revenue)
+  const totalSales = orders.filter((o) => o.orderType !== 'AS').reduce((sum, o) => sum + o.totalAmount, 0);
   const totalOrdersCount = orders.length;
   const pendingOrdersCount = orders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'confirmed').length;
   const finishedGoodsUnits = products.reduce((sum, p) => sum + p.currentStock, 0);
@@ -362,13 +363,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 {orders.slice(0, 5).map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-3">
-                      <Link to={`/sales/${order.id}`} className="font-bold text-blue-600 hover:underline">
-                        {order.orderNumber}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link to={`/sales/${order.id}`} className="font-bold text-blue-600 hover:underline">
+                          {order.orderNumber}
+                        </Link>
+                        {order.orderType === 'AS' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            AS
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-900">{order.companyName}</div>
-                      <div className="text-[11px] text-slate-400">{order.customerName}</div>
+                      <div className="font-semibold text-slate-900">{order.customerName}</div>
+                      <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                        <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{order.companyName}</span>
+                      </div>
                     </td>
                     <td className="py-3 px-3">
                       <div className="truncate max-w-[180px]">

@@ -21,6 +21,8 @@ import {
   removeOrderSignedCopy
 } from '../src/services/db';
 import { getOrderQuantity } from '../src/utils/orderUtils';
+import { getPreviousRatesForProduct, formatPreviousRates } from '../src/utils/pricingUtils';
+import { generateInvoiceHtml, isPakkaBill } from '../src/utils/invoicePrintUtils';
 
 // Mock localStorage for Node environment before running tests
 const storageMap = new Map<string, string>();
@@ -100,6 +102,32 @@ async function runQASuite() {
   const customerDisplayFormat = `${testCustomer.name} — ${testCustomer.company} — Tier ${testCustomer.priceCategory}`;
   assert(customerDisplayFormat.includes(' — ') && customerDisplayFormat.includes('Tier'), 'Customer dropdown display format satisfies Person Name — Company — Tier');
 
+  // Test Customer Search Matching Logic (Real-time, Case-insensitive, multi-field)
+  const filterCustomers = (query: string, list: typeof customers) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((c) =>
+      [c.name, c.company, c.phone, c.priceCategory, `tier ${c.priceCategory}`, `category ${c.priceCategory}`]
+        .filter(Boolean)
+        .some((val) => val.toLowerCase().includes(q))
+    );
+  };
+
+  const nameQuery = testCustomer.name.slice(0, 4);
+  const matchByName = filterCustomers(nameQuery, [testCustomer]);
+  assert(matchByName.length === 1 && matchByName[0].id === testCustomer.id, 'Search customer by person name matches correctly');
+
+  const companyQuery = testCustomer.company.slice(0, 4);
+  const matchByCompany = filterCustomers(companyQuery, [testCustomer]);
+  assert(matchByCompany.length === 1 && matchByCompany[0].id === testCustomer.id, 'Search customer by company name matches correctly');
+
+  const phoneQuery = testCustomer.phone.slice(-4);
+  const matchByPhone = filterCustomers(phoneQuery, [testCustomer]);
+  assert(matchByPhone.length === 1 && matchByPhone[0].id === testCustomer.id, 'Search customer by phone number matches correctly');
+
+  const matchByTier = filterCustomers(`tier ${testCustomer.priceCategory.toLowerCase()}`, [testCustomer]);
+  assert(matchByTier.length === 1 && matchByTier[0].id === testCustomer.id, 'Search customer by tier matches correctly');
+
   // Create fresh QA Sales Order with multiple products
   const productList = await getProducts();
   const prod1 = productList[0];
@@ -148,6 +176,133 @@ async function runQASuite() {
   assert(createdOrder.totalAmount === 9204, 'Grand total calculation is accurate');
   assert(getOrderQuantity(createdOrder) === 1000, 'getOrderQuantity calculates 1000 total items for multi-product order');
 
+  // Test GST Pakka Order Creation & Invoice Generation
+  const pakkaOrder = await addOrder({
+    customerId: testCustomer.id,
+    customerName: testCustomer.name,
+    companyName: testCustomer.company,
+    items: [orderLine1, orderLine2],
+    subtotal: expectedSubtotal,
+    gstAmount: expectedGst,
+    gstRate: 18,
+    gstApplied: true,
+    billType: 'pakka',
+    totalAmount: expectedGrandTotal,
+    totalQuantity: 1000,
+    notes: 'QA Test Pakka Bill'
+  });
+
+  assert(isPakkaBill(pakkaOrder) === true, 'isPakkaBill returns true for order with gstApplied: true');
+  const pakkaHtml = generateInvoiceHtml(pakkaOrder, {
+    companyName: 'Angel Pet Packaging Solutions Pvt Ltd',
+    gstin: '24AAACA1234B1Z9'
+  });
+  assert(pakkaHtml.includes('TAX INVOICE'), 'Pakka bill HTML contains "TAX INVOICE" header');
+  assert(pakkaHtml.includes('24AAACA1234B1Z9'), 'Pakka bill HTML contains company GSTIN');
+  assert(pakkaHtml.includes('CGST (9%):') && pakkaHtml.includes('SGST (9%):'), 'Pakka bill HTML contains CGST and SGST breakdown');
+  assert(pakkaHtml.includes('9,204.00'), 'Pakka bill HTML displays correct Grand Total');
+
+  // Test Non-GST Kachha Order Creation & Invoice Generation
+  const kachhaOrder = await addOrder({
+    customerId: testCustomer.id,
+    customerName: testCustomer.name,
+    companyName: testCustomer.company,
+    items: [orderLine1, orderLine2],
+    subtotal: expectedSubtotal,
+    gstAmount: 0,
+    gstRate: 0,
+    gstApplied: false,
+    billType: 'kachha',
+    totalAmount: expectedSubtotal,
+    totalQuantity: 1000,
+    notes: 'QA Test Kachha Bill'
+  });
+
+  assert(isPakkaBill(kachhaOrder) === false, 'isPakkaBill returns false for order with gstApplied: false');
+  const kachhaHtml = generateInvoiceHtml(kachhaOrder, {
+    companyName: 'Angel Pet Packaging Solutions Pvt Ltd',
+    gstin: '24AAACA1234B1Z9'
+  });
+  assert(kachhaHtml.includes('KACHHA BILL'), 'Kachha bill HTML contains "KACHHA BILL" header');
+  assert(!kachhaHtml.includes('24AAACA1234B1Z9'), 'Kachha bill HTML strictly excludes company GSTIN');
+  assert(!kachhaHtml.includes('CGST') && !kachhaHtml.includes('SGST'), 'Kachha bill HTML strictly excludes CGST/SGST breakdown');
+  assert(kachhaHtml.includes('7,800.00'), 'Kachha bill HTML displays Subtotal = Grand Total = 7,800.00');
+
+  // Test Cash Memo Document Type & Automatic Finance Payment
+  const initialPaymentCount = (await getPayments()).length;
+  const cashMemoOrder = await addOrder({
+    customerId: testCustomer.id,
+    customerName: testCustomer.name,
+    companyName: testCustomer.company,
+    items: [orderLine1],
+    subtotal: orderLine1.subtotal,
+    gstAmount: orderLine1.subtotal * 0.18,
+    gstRate: 18,
+    gstApplied: true,
+    billType: 'pakka',
+    paymentType: 'cash_memo',
+    totalAmount: orderLine1.subtotal * 1.18, // 4800 + 864 = 5664
+    totalQuantity: 400,
+    notes: 'QA Cash Memo Sale'
+  });
+
+  assert(cashMemoOrder.paymentStatus === 'paid', 'Cash Memo automatically sets order paymentStatus to "paid"');
+  assert(cashMemoOrder.paidAmount === 5664, 'Cash Memo sets paidAmount = totalAmount (5664)');
+  assert(cashMemoOrder.paymentType === 'cash_memo', 'Cash Memo persists paymentType: "cash_memo"');
+
+  const paymentsAfterCashMemo = await getPayments();
+  assert(paymentsAfterCashMemo.length === initialPaymentCount + 1, 'Cash Memo automatically creates 1 Finance payment transaction');
+  const autoPayment = paymentsAfterCashMemo.find(p => p.orderId === cashMemoOrder.id);
+  assert(autoPayment?.amount === 5664, 'Auto payment record amount matches Grand Total (5664)');
+  assert(autoPayment?.customerId === testCustomer.id, 'Auto payment references correct customer ID');
+  assert(autoPayment?.paymentMethod === 'cash', 'Auto payment has paymentMethod: "cash"');
+
+  const cashMemoInvoiceHtml = generateInvoiceHtml(cashMemoOrder);
+  assert(cashMemoInvoiceHtml.includes('CASH MEMO'), 'Cash Memo invoice HTML clearly contains "CASH MEMO"');
+  assert(cashMemoInvoiceHtml.includes('Fully Settled ✓') || cashMemoInvoiceHtml.includes('0.00'), 'Cash Memo invoice shows fully settled/zero balance');
+
+  // Test Debit Memo Document Type (No auto payment, remains pending)
+  const debitMemoOrder = await addOrder({
+    customerId: testCustomer.id,
+    customerName: testCustomer.name,
+    companyName: testCustomer.company,
+    items: [orderLine2],
+    subtotal: orderLine2.subtotal,
+    gstAmount: 0,
+    gstRate: 0,
+    gstApplied: false,
+    billType: 'kachha',
+    paymentType: 'debit_memo',
+    totalAmount: orderLine2.subtotal, // 3000
+    totalQuantity: 600,
+    notes: 'QA Debit Memo Sale'
+  });
+
+  assert(debitMemoOrder.paymentStatus === 'pending', 'Debit Memo sets paymentStatus to "pending"');
+  assert(debitMemoOrder.paidAmount === 0, 'Debit Memo sets paidAmount = 0');
+  assert(debitMemoOrder.paymentType === 'debit_memo', 'Debit Memo persists paymentType: "debit_memo"');
+
+  const paymentsAfterDebitMemo = await getPayments();
+  assert(paymentsAfterDebitMemo.length === paymentsAfterCashMemo.length, 'Debit Memo does NOT create automatic Finance payment');
+
+  const debitMemoInvoiceHtml = generateInvoiceHtml(debitMemoOrder);
+  assert(debitMemoInvoiceHtml.includes('DEBIT MEMO'), 'Debit Memo invoice HTML clearly contains "DEBIT MEMO"');
+  assert(debitMemoInvoiceHtml.includes('3,000.00'), 'Debit Memo invoice shows full balance due (3,000.00)');
+
+  // Record Later Payment on Debit Memo
+  const laterPayment = await addPayment({
+    orderId: debitMemoOrder.id,
+    orderNumber: debitMemoOrder.orderNumber,
+    customerId: testCustomer.id,
+    customerName: testCustomer.company,
+    amount: 3000,
+    paymentMethod: 'upi',
+    paymentDate: new Date().toISOString().split('T')[0],
+    notes: 'Later payment for Debit Memo'
+  });
+  assert(laterPayment.amount === 3000, 'Later payment on Debit Memo recorded successfully');
+  const reloadedDebitMemo = (await getOrders()).find(o => o.id === debitMemoOrder.id);
+  assert(reloadedDebitMemo?.paymentStatus === 'paid' && reloadedDebitMemo?.paidAmount === 3000, 'Debit Memo transitions to "paid" after later payment recorded');
 
   // --- MODULE 3: SALES PAYMENTS ---
   console.log('\n--- 3. SALES PAYMENTS MODULE TESTING ---');

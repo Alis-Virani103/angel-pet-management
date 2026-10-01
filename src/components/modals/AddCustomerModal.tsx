@@ -114,7 +114,6 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             <input
               type="text"
               required
-              placeholder="e.g. Dr. Rajesh Patel"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="form-input"
@@ -126,7 +125,6 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             <input
               type="text"
               required
-              placeholder="e.g. MediCare Labs"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               className="form-input"
@@ -140,7 +138,6 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             <input
               type="text"
               required
-              placeholder="+91 98250 12345"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="form-input"
@@ -194,7 +191,6 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
           <label className="form-label">Billing / Factory Address</label>
           <textarea
             rows={2}
-            placeholder="Plot number, GIDC Industrial Estate, City..."
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             className="form-textarea"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Order, Payment, Expense, PurchaseOrder, Customer } from '../types';
-import { getOrders, getPayments, getExpenses, getPurchases, getCustomers, deleteExpense } from '../services/db';
+import { Order, Payment, Expense, PurchaseOrder, Customer, Settings } from '../types';
+import { getOrders, getPayments, getExpenses, getPurchases, getCustomers, getSettings, deleteExpense } from '../services/db';
 import { StatCard } from '../components/common/StatCard';
 import { Badge } from '../components/common/Badge';
 import {
@@ -18,7 +18,8 @@ import {
   Printer,
   CalendarDays,
   RefreshCw,
-  Filter
+  Filter,
+  BookOpen
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 
@@ -30,6 +31,20 @@ interface FinanceProps {
 type StatementFilter = 'all' | 'sales' | 'purchases';
 type DateFilter = 'all' | 'today' | 'week' | 'month' | 'custom';
 type PartyType = 'customer' | 'supplier';
+
+export type DayLedgerType = 'Sale' | 'Customer Payment' | 'Purchase' | 'Supplier Payment' | 'Expense';
+
+export interface DayLedgerRow {
+  id: string;
+  date: string;
+  description: string;
+  party: string;
+  transactionType: DayLedgerType;
+  debit: number;
+  credit: number;
+  balance: number;
+  detailsPath?: string;
+}
 
 interface PartyLedgerRow {
   date: string;
@@ -76,7 +91,18 @@ export const Finance: React.FC<FinanceProps> = ({
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [activeTab, setActiveTab] = useState<'statement' | 'party' | 'collections' | 'expenses'>('party');
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [activeTab, setActiveTab] = useState<'ledger' | 'party' | 'statement' | 'collections' | 'expenses'>('ledger');
+  
+  // Day-to-Day Ledger filter states
+  const [dayLedgerDateFilter, setDayLedgerDateFilter] = useState<DateFilter>('all');
+  const [dayLedgerStartDate, setDayLedgerStartDate] = useState('');
+  const [dayLedgerEndDate, setDayLedgerEndDate] = useState('');
+  const [dayLedgerTypeFilter, setDayLedgerTypeFilter] = useState<string>('all');
+  const [dayLedgerPartyFilter, setDayLedgerPartyFilter] = useState<string>('all');
+  const [dayLedgerSearch, setDayLedgerSearch] = useState('');
+
+  // Party-wise Statement filter states
   const [showPartyFilters, setShowPartyFilters] = useState(false);
   const [partyType, setPartyType] = useState<PartyType>('customer');
   const [selectedPartyId, setSelectedPartyId] = useState('');
@@ -84,6 +110,8 @@ export const Finance: React.FC<FinanceProps> = ({
   const [partyDateFilter, setPartyDateFilter] = useState<'all' | 'today' | 'month' | 'custom'>('all');
   const [partyStartDate, setPartyStartDate] = useState('');
   const [partyEndDate, setPartyEndDate] = useState('');
+
+  // Statement filter states
   const [statementFilter, setStatementFilter] = useState<StatementFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [statementSearch, setStatementSearch] = useState('');
@@ -102,18 +130,20 @@ export const Finance: React.FC<FinanceProps> = ({
   const loadFinanceData = async () => {
     setLoading(true);
     try {
-      const [ordList, pymtList, expList, purchaseList, customerList] = await Promise.all([
+      const [ordList, pymtList, expList, purchaseList, customerList, settingsData] = await Promise.all([
         getOrders(),
         getPayments(),
         getExpenses(),
         getPurchases(),
-        getCustomers()
+        getCustomers(),
+        getSettings()
       ]);
       setOrders(ordList);
       setPayments(pymtList);
       setExpenses(expList);
       setPurchases(purchaseList);
       setCustomers(customerList);
+      setSettings(settingsData);
       setSelectedPartyId((current) => current || customerList[0]?.id || purchaseList[0]?.supplierName || '');
     } catch (e) {
       console.error('Error loading finance data:', e);
@@ -136,7 +166,7 @@ export const Finance: React.FC<FinanceProps> = ({
     }
   };
 
-  const activeOrders = orders.filter((order) => order.orderStatus !== 'cancelled');
+  const activeOrders = orders.filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS');
   const activeOrderIds = new Set(activeOrders.flatMap((order) => [order.id, order.orderNumber]));
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const totalCollections = payments.filter((payment) => activeOrderIds.has(payment.orderId)).reduce((sum, p) => sum + p.amount, 0);
@@ -149,9 +179,194 @@ export const Finance: React.FC<FinanceProps> = ({
     return totals;
   }, {});
 
+  // ── Build Company-Level Day-to-Day Ledger from Real System Data ──────────
+  const rawDayLedger: Array<Omit<DayLedgerRow, 'balance'>> = [];
+
+  // 1. Sales Transactions
+  orders
+    .filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS')
+    .forEach((order) => {
+      const party = order.companyName || order.customerName || 'Customer';
+      const desc = order.items && order.items.length > 0
+        ? `Sale - ${order.items.map((i) => i.productName).filter(Boolean).slice(0, 2).join(', ')}${order.items.length > 2 ? '...' : ''}`
+        : 'Sales';
+      rawDayLedger.push({
+        id: `sale-${order.id}`,
+        date: order.orderDate || '',
+        description: desc,
+        party,
+        transactionType: 'Sale',
+        debit: order.totalAmount || 0,
+        credit: 0,
+        detailsPath: `/sales/${order.id}`
+      });
+    });
+
+  // 2. Customer Payments
+  payments.forEach((payment) => {
+    const party = payment.customerName || 'Customer';
+    rawDayLedger.push({
+      id: `cust-pay-${payment.id}`,
+      date: payment.paymentDate || '',
+      description: 'Payment Received',
+      party,
+      transactionType: 'Customer Payment',
+      debit: 0,
+      credit: payment.amount || 0,
+      detailsPath: payment.orderId ? `/sales/${payment.orderId}` : undefined
+    });
+  });
+
+  // 3. Purchases & Supplier Payments
+  purchases
+    .filter((purchase) => purchase.status !== 'cancelled')
+    .forEach((purchase) => {
+      const party = purchase.supplierName || 'Supplier';
+      const desc = purchase.items && purchase.items.length > 0
+        ? `Raw Material Purchase - ${purchase.items.map((i) => i.rawMaterialName).filter(Boolean).slice(0, 2).join(', ')}${purchase.items.length > 2 ? '...' : ''}`
+        : 'Raw Material Purchase';
+      rawDayLedger.push({
+        id: `purchase-${purchase.id}`,
+        date: purchase.purchaseDate || '',
+        description: desc,
+        party,
+        transactionType: 'Purchase',
+        debit: purchase.totalAmount || 0,
+        credit: 0,
+        detailsPath: `/purchases/${purchase.id}`
+      });
+
+      const recordedPayments = purchase.paymentRecords || [];
+      recordedPayments.forEach((payment) => {
+        rawDayLedger.push({
+          id: `sup-pay-${payment.id}`,
+          date: payment.paymentDate || purchase.purchaseDate || '',
+          description: 'Supplier Payment',
+          party,
+          transactionType: 'Supplier Payment',
+          debit: 0,
+          credit: payment.amount || 0,
+          detailsPath: `/purchases/${purchase.id}`
+        });
+      });
+
+      const recordedTotal = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      const legacyPaid = Math.max(0, (purchase.paidAmount || 0) - recordedTotal);
+      if (legacyPaid > 0) {
+        rawDayLedger.push({
+          id: `sup-pay-legacy-${purchase.id}`,
+          date: purchase.purchaseDate || '',
+          description: 'Supplier Payment',
+          party,
+          transactionType: 'Supplier Payment',
+          debit: 0,
+          credit: legacyPaid,
+          detailsPath: `/purchases/${purchase.id}`
+        });
+      }
+    });
+
+  // 4. Expenses
+  expenses.forEach((expense) => {
+    rawDayLedger.push({
+        id: `expense-${expense.id}`,
+        date: expense.expenseDate || '',
+        description: expense.description || 'Factory Expense',
+        party: '—',
+        transactionType: 'Expense',
+        debit: expense.amount || 0,
+        credit: 0
+      });
+    });
+
+  // Sort chronologically ascending
+  const sortedDayLedger = [...rawDayLedger].sort((first, second) => {
+    if (!first.date && second.date) return 1;
+    if (first.date && !second.date) return -1;
+    const dateCmp = (first.date || '').localeCompare(second.date || '');
+    if (dateCmp !== 0) return dateCmp;
+    const typePriority: Record<DayLedgerType, number> = {
+      Sale: 1,
+      Purchase: 2,
+      Expense: 3,
+      'Customer Payment': 4,
+      'Supplier Payment': 5
+    };
+    return (typePriority[first.transactionType] || 9) - (typePriority[second.transactionType] || 9);
+  });
+
+  // Calculate Running Balance across the master chronological timeline
+  let runningLedgerBal = 0;
+  const masterDayLedgerWithBalance: DayLedgerRow[] = sortedDayLedger.map((row) => {
+    runningLedgerBal += row.debit - row.credit;
+    return {
+      ...row,
+      balance: runningLedgerBal
+    };
+  });
+
+  const today = toDateKey(new Date());
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartKey = toDateKey(weekStart);
+  const monthStart = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
+
+  // Filtered Day-to-Day Ledger Rows
+  const filteredDayLedgerRows = masterDayLedgerWithBalance
+    .filter((row) => {
+      if (dayLedgerTypeFilter !== 'all' && row.transactionType !== dayLedgerTypeFilter) return false;
+      if (dayLedgerPartyFilter !== 'all' && row.party !== dayLedgerPartyFilter) return false;
+      if (dayLedgerDateFilter === 'today') return row.date === today;
+      if (dayLedgerDateFilter === 'week') return row.date >= weekStartKey && row.date <= today;
+      if (dayLedgerDateFilter === 'month') return row.date >= monthStart && row.date <= today;
+      if (dayLedgerDateFilter === 'custom') {
+        return (!dayLedgerStartDate || row.date >= dayLedgerStartDate) && (!dayLedgerEndDate || row.date <= dayLedgerEndDate);
+      }
+      return true;
+    })
+    .filter((row) => {
+      const query = dayLedgerSearch.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        row.description.toLowerCase().includes(query) ||
+        row.party.toLowerCase().includes(query) ||
+        row.transactionType.toLowerCase().includes(query) ||
+        row.date.toLowerCase().includes(query)
+      );
+    });
+
+  const dayLedgerTotalDebit = filteredDayLedgerRows.reduce((sum, row) => sum + row.debit, 0);
+  const dayLedgerTotalCredit = filteredDayLedgerRows.reduce((sum, row) => sum + row.credit, 0);
+  const dayLedgerClosingBalance = dayLedgerTotalDebit - dayLedgerTotalCredit;
+
+  const dayLedgerPartyOptions = Array.from(
+    new Set(
+      masterDayLedgerWithBalance
+        .map((row) => row.party)
+        .filter((party) => party && party !== '—')
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
+  const getBadgeForType = (type: DayLedgerType) => {
+    switch (type) {
+      case 'Sale':
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">{t('Sale')}</span>;
+      case 'Customer Payment':
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">{t('Customer Payment')}</span>;
+      case 'Purchase':
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">{t('Purchase')}</span>;
+      case 'Supplier Payment':
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">{t('Supplier Payment')}</span>;
+      case 'Expense':
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/60">{t('Expense')}</span>;
+      default:
+        return <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-50 text-slate-700 border border-slate-200/60">{type}</span>;
+    }
+  };
+
   const statementRows: StatementRow[] = [
     ...orders
-      .filter((order) => order.orderStatus !== 'cancelled')
+      .filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS')
       .map((order) => {
         const paid = paymentTotalsByOrder[order.id] || paymentTotalsByOrder[order.orderNumber] || 0;
         return {
@@ -181,11 +396,6 @@ export const Finance: React.FC<FinanceProps> = ({
       }))
   ];
 
-  const today = toDateKey(new Date());
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const weekStartKey = toDateKey(weekStart);
-  const monthStart = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
   const filteredStatementRows = statementRows
     .filter((row) => statementFilter === 'all' || (statementFilter === 'sales' ? row.type === 'SALE' : row.type === 'PURCHASE'))
     .filter((row) => {
@@ -227,7 +437,7 @@ export const Finance: React.FC<FinanceProps> = ({
   const partyLedgerBase: Array<Omit<PartyLedgerRow, 'balance'>> = [];
 
   if (partyType === 'customer' && isAllParties) {
-    const customerOrders = orders.filter((order) => order.orderStatus !== 'cancelled');
+    const customerOrders = orders.filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS');
     customerOrders.forEach((order) => {
       partyLedgerBase.push({
         date: order.orderDate,
@@ -257,6 +467,7 @@ export const Finance: React.FC<FinanceProps> = ({
   } else if (partyType === 'customer' && selectedCustomer) {
     const customerOrders = orders.filter((order) =>
       order.orderStatus !== 'cancelled' &&
+      order.orderType !== 'AS' &&
       (order.customerId === selectedCustomer.id || order.companyName === selectedCustomer.company || order.customerName === selectedCustomer.name)
     );
     customerOrders.forEach((order) => {
@@ -467,6 +678,17 @@ export const Finance: React.FC<FinanceProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="inline-flex flex-wrap p-1 bg-slate-100/80 rounded-lg border border-slate-200/60 gap-1 text-xs">
             <button
+              onClick={() => setActiveTab('ledger')}
+              className={`px-3.5 py-1.5 font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                activeTab === 'ledger'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+              <span>{t('Day-to-Day Ledger')}</span>
+            </button>
+            <button
               onClick={() => setActiveTab('party')}
               className={`px-3.5 py-1.5 font-semibold rounded-md transition-all ${
                 activeTab === 'party'
@@ -519,7 +741,176 @@ export const Finance: React.FC<FinanceProps> = ({
           )}
         </div>
 
-        {activeTab === 'party' ? (
+        {activeTab === 'ledger' ? (
+          <div className="space-y-4">
+            {/* Day-to-Day Ledger Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100/80">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Total Debit')}</div>
+                <div className="text-lg font-bold text-blue-700 mt-1">{formatCurrency(dayLedgerTotalDebit)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Sales, Purchases & Expenses</div>
+              </div>
+              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-100/80">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Total Credit')}</div>
+                <div className="text-lg font-bold text-emerald-700 mt-1">{formatCurrency(dayLedgerTotalCredit)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Customer & Supplier Payments</div>
+              </div>
+              <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-100/80">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Closing Balance')}</div>
+                <div className={`text-lg font-bold mt-1 ${dayLedgerClosingBalance >= 0 ? 'text-purple-700' : 'text-rose-700'}`}>
+                  {formatCurrency(dayLedgerClosingBalance)}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Net Cumulative Ledger Position</div>
+              </div>
+            </div>
+
+            {/* Filters Toolbar */}
+            <div className="flex flex-col lg:flex-row gap-2.5 lg:items-center lg:justify-between bg-slate-50/60 p-3 rounded-xl border border-slate-200/70">
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={dayLedgerSearch}
+                    onChange={(e) => setDayLedgerSearch(e.target.value)}
+                    placeholder="Search description, party..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <select
+                  value={dayLedgerDateFilter}
+                  onChange={(e) => setDayLedgerDateFilter(e.target.value as DateFilter)}
+                  className="px-2.5 py-1.5 bg-white text-xs font-medium rounded-lg border border-slate-200 text-slate-700"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="today">Today</option>
+                  <option value="week">This Week</option>
+                  <option value="month">This Month</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+
+                <select
+                  value={dayLedgerTypeFilter}
+                  onChange={(e) => setDayLedgerTypeFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white text-xs font-medium rounded-lg border border-slate-200 text-slate-700"
+                >
+                  <option value="all">{t('All Transaction Types')}</option>
+                  <option value="Sale">{t('Sale')}</option>
+                  <option value="Customer Payment">{t('Customer Payment')}</option>
+                  <option value="Purchase">{t('Purchase')}</option>
+                  <option value="Supplier Payment">{t('Supplier Payment')}</option>
+                  <option value="Expense">{t('Expense')}</option>
+                </select>
+
+                <select
+                  value={dayLedgerPartyFilter}
+                  onChange={(e) => setDayLedgerPartyFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white text-xs font-medium rounded-lg border border-slate-200 text-slate-700 max-w-[180px] truncate"
+                >
+                  <option value="all">{t('All Parties')}</option>
+                  {dayLedgerPartyOptions.map((party) => (
+                    <option key={party} value={party}>
+                      {party}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 self-end lg:self-auto">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors shadow-2xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>{t('Print Ledger')}</span>
+                </button>
+                <button
+                  onClick={loadFinanceData}
+                  className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+                  title="Refresh data"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {dayLedgerDateFilter === 'custom' && (
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <CalendarDays className="w-4 h-4 text-slate-400" />
+                <label className="flex items-center gap-1">
+                  From:
+                  <input
+                    type="date"
+                    value={dayLedgerStartDate}
+                    onChange={(e) => setDayLedgerStartDate(e.target.value)}
+                    className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs"
+                  />
+                </label>
+                <label className="flex items-center gap-1">
+                  To:
+                  <input
+                    type="date"
+                    value={dayLedgerEndDate}
+                    onChange={(e) => setDayLedgerEndDate(e.target.value)}
+                    className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs"
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Day-to-Day Ledger Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Description</th>
+                    <th className="py-3 px-4">Party</th>
+                    <th className="py-3 px-4">Transaction Type</th>
+                    <th className="py-3 px-4 text-right">Debit</th>
+                    <th className="py-3 px-4 text-right">Credit</th>
+                    <th className="py-3 px-4 text-right">Running Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                  {filteredDayLedgerRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        {t('No ledger transactions found for the selected period.')}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDayLedgerRows.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date || '—'}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">
+                          {row.detailsPath ? (
+                            <Link to={row.detailsPath} className="hover:text-blue-600 transition-colors">
+                              {row.description}
+                            </Link>
+                          ) : (
+                            row.description
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800">{row.party}</td>
+                        <td className="py-3 px-4">{getBadgeForType(row.transactionType)}</td>
+                        <td className="py-3 px-4 text-right font-semibold text-blue-700 whitespace-nowrap">
+                          {row.debit > 0 ? formatCurrency(row.debit) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                          {row.credit > 0 ? formatCurrency(row.credit) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
+                          {formatCurrency(row.balance)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : activeTab === 'party' ? (
           <div className="space-y-4">
             {showPartyFilters && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -701,8 +1092,6 @@ export const Finance: React.FC<FinanceProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3 px-4">Receipt No</th>
-                  <th className="py-3 px-4">Order ID</th>
                   <th className="py-3 px-4">Customer Name</th>
                   <th className="py-3 px-4">Amount Received</th>
                   <th className="py-3 px-4">Payment Method</th>
@@ -713,15 +1102,13 @@ export const Finance: React.FC<FinanceProps> = ({
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                 {payments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
-                      No payment receipts recorded yet.
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                      No customer payment records found.
                     </td>
                   </tr>
                 ) : (
                   payments.map((pymt) => (
                     <tr key={pymt.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-mono font-semibold text-emerald-600">{pymt.receiptNumber}</td>
-                      <td className="py-3 px-4 font-semibold text-blue-600">{pymt.orderNumber}</td>
                       <td className="py-3 px-4 font-medium text-slate-900">{pymt.customerName}</td>
                       <td className="py-3 px-4 font-semibold text-emerald-700">
                         ₹{pymt.amount.toLocaleString()}
@@ -847,6 +1234,139 @@ export const Finance: React.FC<FinanceProps> = ({
           </div>
         </div>
       )}
+
+      {/* Printable Company Day-to-Day Ledger */}
+      <div id="angel-print-ledger" className="hidden">
+        <div className="p-8 text-slate-900 bg-white font-sans">
+          {/* Header with Company details */}
+          <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4 mb-4">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                {settings?.companyName || 'ANGEL PET'}
+              </h1>
+              <p className="text-xs text-slate-600 mt-1 max-w-md">{settings?.address || 'Registered Office / Factory Address'}</p>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {settings?.phone ? `Phone: ${settings.phone} ` : ''}
+                {settings?.email ? `| Email: ${settings.email}` : ''}
+              </p>
+              {settings?.gstin && <p className="text-xs font-semibold text-slate-700 mt-0.5">GSTIN: {settings.gstin}</p>}
+            </div>
+            <div className="text-right">
+              <div className="inline-block px-3 py-1 bg-slate-900 text-white text-xs font-bold uppercase tracking-wider rounded">
+                Company Day-to-Day Ledger
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Generated: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+              <p className="text-xs font-medium text-slate-700 mt-0.5">
+                {dayLedgerDateFilter === 'today'
+                  ? `Date: ${today}`
+                  : dayLedgerDateFilter === 'custom' && (dayLedgerStartDate || dayLedgerEndDate)
+                  ? `Period: ${dayLedgerStartDate || 'Start'} to ${dayLedgerEndDate || 'End'}`
+                  : dayLedgerDateFilter === 'month'
+                  ? `Period: This Month`
+                  : dayLedgerDateFilter === 'week'
+                  ? `Period: This Week`
+                  : 'Period: All Recorded Transactions'}
+              </p>
+            </div>
+          </div>
+
+          {/* Filter indicators if any */}
+          {(dayLedgerTypeFilter !== 'all' || dayLedgerPartyFilter !== 'all') && (
+            <div className="mb-4 p-2 bg-slate-100 rounded text-xs flex gap-4 text-slate-700 font-medium">
+              {dayLedgerTypeFilter !== 'all' && (
+                <div>
+                  <strong>Type Filter:</strong> {dayLedgerTypeFilter}
+                </div>
+              )}
+              {dayLedgerPartyFilter !== 'all' && (
+                <div>
+                  <strong>Party Filter:</strong> {dayLedgerPartyFilter}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Ledger Table */}
+          <table className="w-full text-left border-collapse mb-6 text-xs">
+            <thead>
+              <tr className="bg-slate-100 border-y border-slate-300 text-[11px] font-bold text-slate-800 uppercase">
+                <th className="py-2.5 px-3">Date</th>
+                <th className="py-2.5 px-3">Description</th>
+                <th className="py-2.5 px-3">Party</th>
+                <th className="py-2.5 px-3">Transaction Type</th>
+                <th className="py-2.5 px-3 text-right">Debit (₹)</th>
+                <th className="py-2.5 px-3 text-right">Credit (₹)</th>
+                <th className="py-2.5 px-3 text-right">Balance (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {filteredDayLedgerRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    No ledger transactions recorded in this period.
+                  </td>
+                </tr>
+              ) : (
+                filteredDayLedgerRows.map((row) => (
+                  <tr key={row.id} className="border-b border-slate-100">
+                    <td className="py-2 px-3 whitespace-nowrap text-slate-700">{row.date || '—'}</td>
+                    <td className="py-2 px-3 font-medium text-slate-900">{row.description}</td>
+                    <td className="py-2 px-3 text-slate-800">{row.party}</td>
+                    <td className="py-2 px-3 font-semibold text-slate-700">{row.transactionType}</td>
+                    <td className="py-2 px-3 text-right font-semibold text-slate-900">
+                      {row.debit > 0 ? formatCurrency(row.debit) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-semibold text-slate-900">
+                      {row.credit > 0 ? formatCurrency(row.credit) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-bold text-slate-900">
+                      {formatCurrency(row.balance)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 border-t-2 border-slate-900 font-bold text-slate-900">
+                <td colSpan={4} className="py-3 px-3 uppercase tracking-wider text-right">Total:</td>
+                <td className="py-3 px-3 text-right text-blue-900">{formatCurrency(dayLedgerTotalDebit)}</td>
+                <td className="py-3 px-3 text-right text-emerald-900">{formatCurrency(dayLedgerTotalCredit)}</td>
+                <td className="py-3 px-3 text-right text-slate-900">{formatCurrency(dayLedgerClosingBalance)}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Summary Block */}
+          <div className="grid grid-cols-3 gap-4 border border-slate-300 p-4 rounded mb-8 text-xs bg-slate-50">
+            <div>
+              <span className="text-slate-500 font-medium block">Total Debit:</span>
+              <span className="text-base font-bold text-slate-900">{formatCurrency(dayLedgerTotalDebit)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium block">Total Credit:</span>
+              <span className="text-base font-bold text-slate-900">{formatCurrency(dayLedgerTotalCredit)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium block">Closing Balance:</span>
+              <span className="text-base font-bold text-slate-900">{formatCurrency(dayLedgerClosingBalance)}</span>
+            </div>
+          </div>
+
+          {/* Signatures */}
+          <div className="flex justify-between items-end pt-12 text-xs text-slate-600">
+            <div>
+              <p className="border-t border-slate-400 pt-1 w-48 text-center">Prepared By</p>
+            </div>
+            <div>
+              <p className="border-t border-slate-400 pt-1 w-48 text-center font-semibold text-slate-800">
+                Authorized Signatory
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

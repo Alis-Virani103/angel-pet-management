@@ -54,6 +54,7 @@ import {
   initialSettings,
   initialPurchases
 } from '../data/seedData';
+import { getOrderDeliveryProgress, generateNextChallanNumber } from '../utils/dispatchUtils';
 
 // LocalStorage Keys for fallback
 const STORAGE_KEYS = {
@@ -446,14 +447,21 @@ export async function getOrders(): Promise<Order[]> {
 export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'paidAmount' | 'paymentStatus' | 'orderStatus' | 'orderDate'>): Promise<Order> {
   const randomNum = Math.floor(10000 + Math.random() * 90000);
   const orderNumber = `ORD-${randomNum}`;
+  const orderType = orderData.orderType || 'REGULAR';
+  const isAS = orderType === 'AS';
+  const isCashMemo = !isAS && orderData.paymentType === 'cash_memo';
+  const orderDate = new Date().toISOString().split('T')[0];
+
   const newOrder: Order = {
     ...orderData,
+    orderType,
     id: orderNumber,
     orderNumber,
     orderStatus: 'pending',
-    paymentStatus: 'pending',
-    paidAmount: 0,
-    orderDate: new Date().toISOString().split('T')[0]
+    paymentStatus: isAS ? 'paid' : (isCashMemo ? 'paid' : 'pending'),
+    paidAmount: isAS ? 0 : (isCashMemo ? orderData.totalAmount : 0),
+    paymentType: isAS ? undefined : (orderData.paymentType || 'debit_memo'),
+    orderDate
   };
 
   const list = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
@@ -465,16 +473,42 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
     );
   }
 
-  // Update Customer's total orders & total spent
+  // Update Customer's total orders & total spent (AS Orders do not add to totalSpent)
   const customers = await getCustomers();
   const targetCustomer = customers.find((c) => c.id === newOrder.customerId);
   if (targetCustomer) {
     const updatedTotalOrders = (targetCustomer.totalOrders || 0) + 1;
-    const updatedTotalSpent = (targetCustomer.totalSpent || 0) + newOrder.totalAmount;
+    const updatedTotalSpent = (targetCustomer.totalSpent || 0) + (isAS ? 0 : newOrder.totalAmount);
     await updateCustomer(targetCustomer.id, {
       totalOrders: updatedTotalOrders,
       totalSpent: updatedTotalSpent
     });
+  }
+
+  // If Cash Memo and not AS Order, automatically record full payment in Finance
+  if (!isAS && isCashMemo && newOrder.totalAmount > 0) {
+    const receiptNumber = `REC-${Math.floor(5000 + Math.random() * 5000)}`;
+    const newPayment: Payment = {
+      id: receiptNumber,
+      receiptNumber,
+      orderId: newOrder.id,
+      orderNumber: newOrder.orderNumber,
+      customerId: newOrder.customerId,
+      customerName: newOrder.companyName || newOrder.customerName,
+      amount: newOrder.totalAmount,
+      paymentMethod: 'cash',
+      paymentDate: orderDate,
+      notes: 'Full payment received against Cash Memo'
+    };
+
+    const paymentList = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+    setLocalItem(STORAGE_KEYS.PAYMENTS, [newPayment, ...paymentList]);
+
+    if (shouldSyncToFirebase()) {
+      withTimeout(setDoc(doc(getDb(), 'payments', newPayment.id), newPayment), 2500).catch((e) =>
+        console.error('Error adding Cash Memo payment to Firebase:', e)
+      );
+    }
   }
 
   return newOrder;
@@ -622,12 +656,45 @@ export async function addDispatch(data: Omit<Dispatch, 'id' | 'dispatchNumber' |
   if (targetOrder?.orderStatus === 'cancelled') {
     throw new Error('Cancelled orders cannot be dispatched.');
   }
+
   const existingDispatches = await getDispatches();
-  if (existingDispatches.some((dispatch) => dispatch.orderId === targetOrder.id && dispatch.stockDeducted)) {
-    throw new Error('This sales order has already been dispatched.');
+  const orderDispatches = existingDispatches.filter(
+    (d) => d.orderId === targetOrder.id || d.orderNumber === targetOrder.orderNumber
+  );
+
+  // Validate per-product delivery quantities against remaining quantities
+  const progress = getOrderDeliveryProgress(targetOrder, orderDispatches);
+  
+  if (data.items.length === 0) {
+    throw new Error('No items specified for delivery.');
   }
 
-  const dispatchNumber = `DSP-${Math.floor(8000 + Math.random() * 2000)}`;
+  let totalDeliveringThisTime = 0;
+
+  for (const dispatchItem of data.items) {
+    if (dispatchItem.quantity < 0) {
+      throw new Error(`Quantity for ${dispatchItem.productName} cannot be negative.`);
+    }
+    const productProgress = progress.items.find(
+      (p) => p.productId === dispatchItem.productId || p.productName === dispatchItem.productName
+    );
+    const remaining = productProgress ? productProgress.remainingQuantity : 0;
+
+    if (dispatchItem.quantity > remaining) {
+      if (progress.items.length === 1) {
+        throw new Error(`Only ${remaining.toLocaleString()} units remain for delivery.`);
+      }
+      throw new Error(`Only ${remaining.toLocaleString()} units remain for delivery of ${dispatchItem.productName}.`);
+    }
+    totalDeliveringThisTime += dispatchItem.quantity;
+  }
+
+  if (totalDeliveringThisTime <= 0) {
+    throw new Error('Please specify at least one product with a delivery quantity greater than 0.');
+  }
+
+  // Generate unique sub-challan number (e.g. CH-001, CH-002)
+  const dispatchNumber = generateNextChallanNumber(existingDispatches);
   const newDispatch: Dispatch = {
     ...data,
     id: dispatchNumber,
@@ -687,56 +754,62 @@ export async function updateDispatchStatus(id: string, newStatus: Dispatch['stat
 }
 
 async function processDispatchStockDeduction(dispatch: Dispatch): Promise<void> {
-  if (dispatch.stockDeducted) {
-    // Stock was already deducted for this dispatch; only sync order status
-    const orders = await getOrders();
-    const targetOrder = orders.find((o) => o.id === dispatch.orderId || o.orderNumber === dispatch.orderNumber);
-    if (targetOrder) {
-      const newOrderStatus = dispatch.status === 'delivered' ? 'completed' : 'dispatched';
-      await updateOrderStatus(targetOrder.id, newOrderStatus);
-    }
-    return;
-  }
-
   const orders = await getOrders();
   const targetOrder = orders.find((o) => o.id === dispatch.orderId || o.orderNumber === dispatch.orderNumber);
   if (targetOrder?.orderStatus === 'cancelled') {
     throw new Error('Cancelled orders cannot affect inventory.');
   }
 
-  const products = await getProducts();
-  const deductedByProduct = new Map<string, number>();
-  for (const item of dispatch.items) {
-    deductedByProduct.set(item.productId, (deductedByProduct.get(item.productId) || 0) + item.quantity);
-  }
-  for (const [productId, quantity] of deductedByProduct) {
-    const product = products.find((candidate) => candidate.id === productId);
-    if (product && product.currentStock < quantity) {
-      throw new Error(`Insufficient stock for ${product.name}. Available: ${product.currentStock}, required: ${quantity}.`);
+  // AS Orders must NOT deduct stock
+  const isASOrder = targetOrder?.orderType === 'AS';
+
+  if (!dispatch.stockDeducted && !isASOrder) {
+    const products = await getProducts();
+    const deductedByProduct = new Map<string, number>();
+    for (const item of dispatch.items) {
+      deductedByProduct.set(item.productId, (deductedByProduct.get(item.productId) || 0) + item.quantity);
     }
-  }
-  for (const [productId, quantity] of deductedByProduct) {
-    const product = products.find((p) => p.id === productId);
-    if (product) {
-      const newStock = product.currentStock - quantity;
-      await updateProduct(product.id, { currentStock: newStock });
+    for (const [productId, quantity] of deductedByProduct) {
+      const product = products.find((candidate) => candidate.id === productId);
+      if (product && product.currentStock < quantity) {
+        throw new Error(`Insufficient stock for ${product.name}. Available: ${product.currentStock}, required: ${quantity}.`);
+      }
+    }
+    for (const [productId, quantity] of deductedByProduct) {
+      const product = products.find((p) => p.id === productId);
+      if (product) {
+        const newStock = product.currentStock - quantity;
+        await updateProduct(product.id, { currentStock: newStock });
+      }
+    }
+
+    // Mark stock as deducted for this specific sub-delivery to avoid duplicate deductions
+    const list = getLocalItem<Dispatch[]>(STORAGE_KEYS.DISPATCHES, initialDispatches);
+    const newList = list.map((item) => (item.id === dispatch.id ? { ...item, stockDeducted: true } : item));
+    setLocalItem(STORAGE_KEYS.DISPATCHES, newList);
+
+    if (shouldSyncToFirebase()) {
+      withTimeout(setDoc(doc(getDb(), 'dispatches', dispatch.id), { stockDeducted: true }, { merge: true }), 2500).catch((e) =>
+        console.error('Error updating stockDeducted flag in Firebase:', e)
+      );
     }
   }
 
+  // Update order status based on total fulfillment progress across all sub-deliveries
   if (targetOrder) {
-    const newOrderStatus = dispatch.status === 'delivered' ? 'completed' : 'dispatched';
-    await updateOrderStatus(targetOrder.id, newOrderStatus);
-  }
+    const allDispatches = await getDispatches();
+    const orderProgress = getOrderDeliveryProgress(targetOrder, allDispatches);
 
-  // Mark stock as deducted to avoid duplicate deductions
-  const list = getLocalItem<Dispatch[]>(STORAGE_KEYS.DISPATCHES, initialDispatches);
-  const newList = list.map((item) => (item.id === dispatch.id ? { ...item, stockDeducted: true } : item));
-  setLocalItem(STORAGE_KEYS.DISPATCHES, newList);
-
-  if (shouldSyncToFirebase()) {
-    withTimeout(setDoc(doc(getDb(), 'dispatches', dispatch.id), { stockDeducted: true }, { merge: true }), 2500).catch((e) =>
-      console.error('Error updating stockDeducted flag in Firebase:', e)
-    );
+    let newOrderStatus: Order['orderStatus'] = targetOrder.orderStatus;
+    if (orderProgress.isFullyDelivered) {
+      const allDelivered = orderProgress.subDeliveries.every((d) => d.status === 'delivered');
+      newOrderStatus = allDelivered ? 'completed' : 'dispatched';
+    } else if (orderProgress.totalDeliveredQuantity > 0) {
+      newOrderStatus = 'dispatched';
+    }
+    if (newOrderStatus !== targetOrder.orderStatus) {
+      await updateOrderStatus(targetOrder.id, newOrderStatus);
+    }
   }
 }
 
@@ -766,8 +839,14 @@ export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): P
   const orders = await getOrders();
   const targetOrder = orders.find((o) => o.id === data.orderId || o.orderNumber === data.orderNumber);
   if (!targetOrder) throw new Error('Sales order not found.');
+  if (targetOrder.orderType === 'AS') {
+    throw new Error('Payment not applicable for AS Order.');
+  }
   if (targetOrder.orderStatus === 'cancelled') {
     throw new Error('Cancelled orders cannot receive payments.');
+  }
+  if (targetOrder.paymentType === 'cash_memo') {
+    throw new Error('Cash Memo orders are already paid in full. Additional payments cannot be recorded.');
   }
   if (data.amount > Math.max(0, targetOrder.totalAmount - targetOrder.paidAmount)) {
     throw new Error('Payment amount cannot exceed the outstanding balance.');
@@ -899,7 +978,13 @@ export async function addRawMaterial(data: Omit<RawMaterial, 'id' | 'status' | '
     ...data,
     id,
     status,
-    lastRestocked: new Date().toISOString().split('T')[0]
+    lastRestocked: new Date().toISOString().split('T')[0],
+    // Set default unit configuration if not provided
+    baseUnit: data.baseUnit || data.unit || 'kg',
+    purchaseUnit: data.purchaseUnit || data.unit || 'kg',
+    consumptionUnit: data.consumptionUnit || data.unit || 'kg',
+    conversionFactor: data.conversionFactor || 1,
+    piecesPerBaseUnit: data.piecesPerBaseUnit || undefined
   };
 
   const list = getLocalItem<RawMaterial[]>(STORAGE_KEYS.RAW_MATERIALS, initialRawMaterials);
@@ -976,7 +1061,51 @@ export async function getRawMaterialUsage(): Promise<RawMaterialUsage[]> {
 
 export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>): Promise<RawMaterialUsage> {
   const id = `RMU-${Math.floor(1000 + Math.random() * 9000)}`;
-  const newUsage: RawMaterialUsage = { ...data, id };
+  
+  // Get material to handle unit conversion
+  const materials = await getRawMaterials();
+  const material = materials.find((m) => m.id === data.materialId);
+  
+  let baseQuantity = data.quantity;
+  let baseUnit = data.unit;
+  let equivalentPieces: number | undefined = undefined;
+  
+  // Calculate total deduction for stock (consumed + wastage1 + wastage2)
+  const totalDeductionInput = data.totalDeduction || data.quantity;
+  let baseTotalDeduction = totalDeductionInput;
+  
+  if (material) {
+    // Convert to base unit if conversion factor is available
+    if (material.conversionFactor && material.conversionFactor > 0) {
+      // If unit is purchase unit, convert to base
+      if (data.unit.toLowerCase() === material.purchaseUnit.toLowerCase()) {
+        baseQuantity = data.quantity * material.conversionFactor;
+        baseTotalDeduction = totalDeductionInput * material.conversionFactor;
+        baseUnit = material.baseUnit;
+      }
+      // If unit is already base or consumption unit, no conversion needed
+      else if (data.unit.toLowerCase() === material.baseUnit.toLowerCase() ||
+               data.unit.toLowerCase() === material.consumptionUnit.toLowerCase()) {
+        baseQuantity = data.quantity;
+        baseTotalDeduction = totalDeductionInput;
+        baseUnit = material.baseUnit;
+      }
+    }
+    
+    // Calculate equivalent pieces if conversion exists (based on total deduction)
+    if (material.piecesPerBaseUnit && material.piecesPerBaseUnit > 0) {
+      equivalentPieces = baseTotalDeduction * material.piecesPerBaseUnit;
+    }
+  }
+  
+  const newUsage: RawMaterialUsage = {
+    ...data,
+    id,
+    baseQuantity,
+    baseUnit,
+    equivalentPieces,
+    createdAt: new Date().toISOString()
+  };
 
   const list = getLocalItem<RawMaterialUsage[]>(STORAGE_KEYS.RAW_MATERIAL_USAGE, initialRawMaterialUsage);
   setLocalItem(STORAGE_KEYS.RAW_MATERIAL_USAGE, [newUsage, ...list]);
@@ -987,11 +1116,9 @@ export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>)
     );
   }
 
-  // Deduct stock from target raw material
-  const materials = await getRawMaterials();
-  const material = materials.find((m) => m.id === data.materialId);
+  // Deduct stock from target raw material (always in base unit using total deduction)
   if (material) {
-    const newStock = Math.max(0, material.currentStock - data.quantity);
+    const newStock = Math.max(0, material.currentStock - baseTotalDeduction);
     await updateRawMaterial(material.id, { currentStock: newStock });
   }
 
@@ -1201,8 +1328,18 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
                    materials.find((m) => (m.name || '').trim().toLowerCase() === (item.rawMaterialName || '').trim().toLowerCase());
 
     if (material) {
+      // Convert purchase quantity to base unit if conversion factor is available
+      let quantityToAdd = item.quantity;
+      if (material.conversionFactor && material.conversionFactor > 0) {
+        // If purchase unit is different from base unit, convert
+        if (item.unit.toLowerCase() === material.purchaseUnit.toLowerCase() &&
+            item.unit.toLowerCase() !== material.baseUnit.toLowerCase()) {
+          quantityToAdd = item.quantity * material.conversionFactor;
+        }
+      }
+      
       const previousAddition = additionsByMaterial.get(material.id) || 0;
-      const totalAddition = previousAddition + item.quantity;
+      const totalAddition = previousAddition + quantityToAdd;
       const newStock = material.currentStock + totalAddition;
       await updateRawMaterial(material.id, {
         currentStock: newStock,
@@ -1219,6 +1356,11 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
         currentStock: item.quantity,
         minimumStock: 500,
         unit: item.unit || 'kg',
+        baseUnit: item.unit || 'kg',
+        purchaseUnit: item.unit || 'kg',
+        consumptionUnit: item.unit || 'kg',
+        conversionFactor: 1,
+        piecesPerBaseUnit: undefined,
         unitCost: item.unitCost || 0,
         supplier: purchase.supplierName || 'Direct Supplier'
       });
@@ -1262,7 +1404,12 @@ export async function getFinishedGoodsLogs(): Promise<FinishedGoodsLog[]> {
 
 export async function addFinishedGoodsLog(data: Omit<FinishedGoodsLog, 'id'>): Promise<FinishedGoodsLog> {
   const id = `FGL-${Math.floor(9000 + Math.random() * 1000)}`;
-  const newLog: FinishedGoodsLog = { ...data, id };
+  const newLog: FinishedGoodsLog = {
+    ...data,
+    id,
+    source: data.source || 'Production',
+    createdAt: data.createdAt || new Date().toISOString()
+  };
 
   const list = getLocalItem<FinishedGoodsLog[]>(STORAGE_KEYS.FINISHED_GOODS_LOGS, initialFinishedGoodsLogs);
   setLocalItem(STORAGE_KEYS.FINISHED_GOODS_LOGS, [newLog, ...list]);
@@ -1399,7 +1546,9 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const payments = await getPayments();
   const rawMaterials = await getRawMaterials();
 
-  const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  // Exclude AS Orders from commercial totalSales
+  const commercialOrders = orders.filter((o) => o.orderType !== 'AS');
+  const totalSales = commercialOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'confirmed').length;
 

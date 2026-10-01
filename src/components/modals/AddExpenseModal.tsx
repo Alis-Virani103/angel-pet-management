@@ -105,7 +105,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           <input
             type="text"
             required
-            placeholder="e.g. Purchased 5 tons PET Granules from Reliance"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="form-input"

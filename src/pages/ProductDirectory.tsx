@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, ProductType } from '../types';
 import { getProducts, updateProduct, deleteProduct } from '../services/db';
 import { getProductImageUrl } from '../utils/productImages';
+import { formatPieceWeight } from '../utils/weightUtils';
 import {
   Package,
   Plus,
@@ -75,7 +76,7 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
       alert('No products to export.');
       return;
     }
-    const headers = ['ID', 'Name', 'SKU', 'Type', 'Size/Spec', 'Price A', 'Price B', 'Price C', 'Stock', 'Unit', 'Units per Packet', 'Status'];
+    const headers = ['ID', 'Name', 'SKU', 'Type', 'Size/Spec', 'Price A', 'Price B', 'Price C', 'Stock', 'Unit', 'Units per Packet', 'Weight per Piece', 'Status'];
     const csvRows = [
       headers.join(','),
       ...filteredProducts.map((p) =>
@@ -91,6 +92,7 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
           p.currentStock,
           `"${p.unit}"`,
           p.unitsPerPacket || '',
+          p.weightPerPiece ? `"${p.weightPerPiece} ${p.weightUnit || 'g'}"` : '""',
           `"${p.status}"`
         ].join(',')
       )
@@ -216,6 +218,16 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
             >
               Caps ({products.filter((p) => p.type === 'cap').length})
             </button>
+            <button
+              onClick={() => setActiveTab('inner')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'inner'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Inners ({products.filter((p) => p.type === 'inner').length})
+            </button>
           </div>
 
           {/* Category Dropdown */}
@@ -228,6 +240,7 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
               <option value="all">All Categories</option>
               <option value="bottle">Bottles</option>
               <option value="cap">Caps</option>
+              <option value="inner">Inners</option>
               {customCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -358,15 +371,27 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
                     )}
                   </div>
 
-                  {/* Card Bottom: Unit Price & Actions */}
+                  {/* Card Bottom: Unit Price & Weight & Actions */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-medium block uppercase tracking-wider">
-                        Unit price
-                      </span>
-                      <span className="text-base font-extrabold text-[#132247]">
-                        ₹{p.priceA.toFixed(2)}
-                      </span>
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-medium block uppercase tracking-wider">
+                          Unit price
+                        </span>
+                        <span className="text-base font-extrabold text-[#132247]">
+                          ₹{p.priceA.toFixed(2)}
+                        </span>
+                      </div>
+                      {typeof p.weightPerPiece === 'number' && p.weightPerPiece > 0 && (
+                        <div className="pl-3 border-l border-slate-200">
+                          <span className="text-[10px] text-slate-400 font-medium block uppercase tracking-wider">
+                            Weight
+                          </span>
+                          <span className="text-xs font-bold text-slate-700">
+                            {formatPieceWeight(p.weightPerPiece, p.weightUnit)}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center space-x-1">

@@ -4,6 +4,7 @@ import { getProducts, getFinishedGoodsLogs } from '../services/db';
 import { getProductImageUrl } from '../utils/productImages';
 import { Badge } from '../components/common/Badge';
 import { StatCard } from '../components/common/StatCard';
+import { ProductInventoryHistoryModal } from '../components/modals/ProductInventoryHistoryModal';
 import {
   Boxes,
   Plus,
@@ -12,18 +13,22 @@ import {
   CheckCircle2,
   Clock,
   TrendingUp,
-  Image as ImageIcon
+  Image as ImageIcon,
+  History
 } from 'lucide-react';
 
 interface FinishedGoodsProps {
   onOpenAddFinishedGoodsModal: () => void;
+  onStockAdded?: () => void;
 }
 
-export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedGoodsModal }) => {
+export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedGoodsModal, onStockAdded }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [logs, setLogs] = useState<FinishedGoodsLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     loadGoods();
@@ -40,6 +45,11 @@ export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedG
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStockAdded = () => {
+    loadGoods();
+    if (onStockAdded) onStockAdded();
   };
 
   const totalFinishedGoodsCount = products.reduce((sum, p) => sum + p.currentStock, 0);
@@ -154,6 +164,7 @@ export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedG
                   <th className="py-3.5 px-4">Minimum Stock</th>
                   <th className="py-3.5 px-4">Unit</th>
                   <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -193,6 +204,18 @@ export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedG
                       <td className="py-3.5 px-4">
                         <Badge status={isLowStock ? 'low_stock' : 'healthy'} />
                       </td>
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => {
+                            setSelectedProduct(p);
+                            setHistoryModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span>History</span>
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -228,6 +251,22 @@ export const FinishedGoods: React.FC<FinishedGoodsProps> = ({ onOpenAddFinishedG
           </div>
         </div>
       </div>
+
+      {/* Product Inventory History Modal */}
+      {selectedProduct && (
+        <ProductInventoryHistoryModal
+          isOpen={historyModalOpen}
+          onClose={() => {
+            setHistoryModalOpen(false);
+            setSelectedProduct(null);
+          }}
+          productId={selectedProduct.id}
+          productName={selectedProduct.name}
+          currentStock={selectedProduct.currentStock}
+          unit={selectedProduct.unit}
+          logs={logs}
+        />
+      )}
     </div>
   );
 };

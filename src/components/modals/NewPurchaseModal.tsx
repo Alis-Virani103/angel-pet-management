@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus } from '../../types';
 import { getRawMaterials, addRawMaterial, addPurchase } from '../../services/db';
+import { toBaseQuantity, formatQuantityWithUnit } from '../../utils/unitConversion';
 import { ShoppingBag, Plus, AlertCircle, CheckCircle2, Search, ChevronDown, Check } from 'lucide-react';
 
 interface NewPurchaseModalProps {
@@ -17,11 +18,11 @@ interface DraftPurchaseItem {
   unitCost: string;
 }
 
-const createDraftItem = (rawMaterialId = ''): DraftPurchaseItem => ({
-  id: `line-${Date.now()}-${Math.random()}`,
+const createDraftItem = (rawMaterialId = '', quantity = '', unitCost = ''): DraftPurchaseItem => ({
+  id: `line-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
   rawMaterialId,
-  quantity: '1000',
-  unitCost: ''
+  quantity,
+  unitCost
 });
 
 interface SearchableMaterialSelectProps {
@@ -178,6 +179,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   const [newMaterialCode, setNewMaterialCode] = useState('');
   const [newMaterialCategory, setNewMaterialCategory] = useState<RawMaterialCategory>('granules');
   const [newMaterialUnit, setNewMaterialUnit] = useState('kg');
+  const [newMaterialBaseUnit, setNewMaterialBaseUnit] = useState('kg');
+  const [newMaterialPurchaseUnit, setNewMaterialPurchaseUnit] = useState('kg');
+  const [newMaterialConsumptionUnit, setNewMaterialConsumptionUnit] = useState('kg');
+  const [newMaterialConversionFactor, setNewMaterialConversionFactor] = useState(1);
+  const [newMaterialPiecesPerBaseUnit, setNewMaterialPiecesPerBaseUnit] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -197,8 +203,55 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     }
   };
 
+  const isItemComplete = (item: DraftPurchaseItem): boolean => {
+    if (!item.rawMaterialId) return false;
+    const qty = Number(item.quantity);
+    if (!item.quantity || isNaN(qty) || qty <= 0) return false;
+    if (item.unitCost === '' || isNaN(Number(item.unitCost)) || Number(item.unitCost) < 0) return false;
+    return true;
+  };
+
+  // Automatically append next empty line when last line is complete, and trim excess empty lines
+  useEffect(() => {
+    setItems((currentItems) => {
+      if (currentItems.length === 0) {
+        return [createDraftItem()];
+      }
+
+      const lastItem = currentItems[currentItems.length - 1];
+      const isLastComplete = isItemComplete(lastItem);
+
+      // If last item is complete and has a selected material, append one blank row
+      if (isLastComplete && lastItem.rawMaterialId) {
+        return [...currentItems, createDraftItem()];
+      }
+
+      // If there are multiple trailing blank rows, trim to exactly one
+      if (currentItems.length >= 2) {
+        const secondLast = currentItems[currentItems.length - 2];
+        const isLastBlank = !lastItem.rawMaterialId && !lastItem.quantity && !lastItem.unitCost;
+        const isSecondLastIncomplete = !isItemComplete(secondLast);
+        if (isSecondLastIncomplete && isLastBlank) {
+          return currentItems.slice(0, -1);
+        }
+      }
+
+      return currentItems;
+    });
+  }, [items]);
+
   const updateItem = (id: string, updates: Partial<DraftPurchaseItem>) => {
     setItems((currentItems) => currentItems.map((item) => item.id === id ? { ...item, ...updates } : item));
+  };
+
+  const removeItem = (id: string) => {
+    setItems((currentItems) => {
+      const filtered = currentItems.filter((candidate) => candidate.id !== id);
+      if (filtered.length === 0) {
+        return [createDraftItem()];
+      }
+      return filtered;
+    });
   };
 
   const handleMaterialChange = (id: string, materialId: string) => {
@@ -207,24 +260,25 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     if (material?.supplier && !supplierName) setSupplierName(material.supplier);
   };
 
-  const selectedMaterial = materials.find((m) => m.id === items[0]?.rawMaterialId);
-  const purchaseItems = items.map((item): PurchaseItem => {
-    const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
-    const quantity = Number(item.quantity) || 0;
-    const unitCost = Number(item.unitCost) || 0;
-    return {
-      rawMaterialId: item.rawMaterialId,
-      rawMaterialName: material?.name || '',
-      hsnSac: material?.code || '',
-      category: material?.category || 'granules',
-      unit: material?.unit || newMaterialUnit,
-      unitCost,
-      quantity,
-      subtotal: quantity * unitCost,
-      taxRate: includeGst ? 18 : 0
-    };
-  });
-  const subtotal = purchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const validPurchaseItems = items
+    .filter(isItemComplete)
+    .map((item): PurchaseItem => {
+      const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
+      const quantity = Number(item.quantity) || 0;
+      const unitCost = Number(item.unitCost) || 0;
+      return {
+        rawMaterialId: item.rawMaterialId,
+        rawMaterialName: material?.name || '',
+        hsnSac: material?.code || '',
+        category: material?.category || 'granules',
+        unit: material?.purchaseUnit || material?.unit || newMaterialUnit,
+        unitCost,
+        quantity,
+        subtotal: quantity * unitCost,
+        taxRate: includeGst ? 18 : 0
+      };
+    });
+  const subtotal = validPurchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
   const gstAmount = includeGst ? subtotal * 0.18 : 0;
   const grandTotal = subtotal + gstAmount;
 
@@ -232,15 +286,37 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (items.length === 0 || items.some((item) => !item.rawMaterialId)) {
-      setError('Please select a material for every bill item.');
+    const nonBlankItems = items.filter(
+      (item) => item.rawMaterialId || item.quantity !== '' || item.unitCost !== ''
+    );
+
+    if (nonBlankItems.length === 0) {
+      setError('Please add at least one complete purchase line item.');
       return;
     }
 
-    if (items.some((item) => Number(item.quantity) <= 0 || Number(item.unitCost) <= 0)) {
-      setError('Please enter a valid quantity and unit cost for every item.');
+    const invalidItem = nonBlankItems.find((item) => !isItemComplete(item));
+    if (invalidItem) {
+      setError('Please enter a valid material, quantity (> 0), and rate (>= 0) for all started line items.');
       return;
     }
+
+    const completedPurchaseItems = nonBlankItems.map((item): PurchaseItem => {
+      const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
+      const quantity = Number(item.quantity) || 0;
+      const unitCost = Number(item.unitCost) || 0;
+      return {
+        rawMaterialId: item.rawMaterialId,
+        rawMaterialName: material?.name || '',
+        hsnSac: material?.code || '',
+        category: material?.category || 'granules',
+        unit: material?.unit || newMaterialUnit,
+        unitCost,
+        quantity,
+        subtotal: quantity * unitCost,
+        taxRate: includeGst ? 18 : 0
+      };
+    });
 
     setLoading(true);
     try {
@@ -258,12 +334,17 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           currentStock: 0, // Stock will be added by the purchase order if status is received
           minimumStock: 500,
           unit: newMaterialUnit,
-          unitCost: Number(items[0]?.unitCost) || 0,
+          baseUnit: newMaterialBaseUnit,
+          purchaseUnit: newMaterialPurchaseUnit,
+          consumptionUnit: newMaterialConsumptionUnit,
+          conversionFactor: newMaterialConversionFactor,
+          piecesPerBaseUnit: newMaterialPiecesPerBaseUnit || undefined,
+          unitCost: Number(completedPurchaseItems[0]?.unitCost) || 0,
           supplier: supplierName || 'Direct Supplier'
         });
         setItems((currentItems) => currentItems.map((item, index) => index === 0 ? { ...item, rawMaterialId: createdMaterial.id } : item));
-        purchaseItems[0] = {
-          ...purchaseItems[0],
+        completedPurchaseItems[0] = {
+          ...completedPurchaseItems[0],
           rawMaterialId: createdMaterial.id,
           rawMaterialName: createdMaterial.name,
           category: createdMaterial.category,
@@ -274,12 +355,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       await addPurchase({
         supplierName: supplierName || 'Standard Supplier',
         supplierPhone: supplierPhone || '',
-        items: purchaseItems,
+        items: completedPurchaseItems,
         subtotal,
         gstRate: includeGst ? 18 : 0,
         gstAmount,
         totalAmount: grandTotal,
-        totalQuantity: purchaseItems.reduce((sum, item) => sum + item.quantity, 0),
+        totalQuantity: completedPurchaseItems.reduce((sum, item) => sum + item.quantity, 0),
         status,
         purchaseDate,
         notes
@@ -317,7 +398,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             type="text"
             required
             list="purchase-suppliers"
-            placeholder="Select existing supplier or enter a new supplier"
             value={supplierName}
             onChange={(e) => setSupplierName(e.target.value)}
             className="w-full px-3 py-2.5 bg-white text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
@@ -332,27 +412,21 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
 
         {/* Raw Material Selection */}
         <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Bill Line Items
-              </label>
-              <p className="text-[11px] text-slate-500 mt-1">Add each purchased material as a separate line.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setItems((currentItems) => [...currentItems, createDraftItem()])}
-              className="w-full sm:w-auto px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Item
-            </button>
+          <div>
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Bill Line Items
+            </label>
+            <p className="text-[11px] text-slate-500 mt-1">Add each purchased material as a separate line.</p>
           </div>
 
           <div className="space-y-3">
             {items.map((item, index) => {
               const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
-              const line = purchaseItems[index];
+              const lineQty = Number(item.quantity) || 0;
+              const lineCost = Number(item.unitCost) || 0;
+              const lineSubtotal = lineQty * lineCost;
+              const isOnlyBlankRow = items.length === 1 && !item.rawMaterialId && !item.quantity && !item.unitCost;
+
               return (
                 <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(120px,0.9fr)_minmax(150px,1fr)_minmax(155px,1fr)_auto] gap-x-3 gap-y-3 items-end p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
                   <div className="min-w-0">
@@ -370,31 +444,36 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                     <input
                       type="text"
                       inputMode="decimal"
-                      required
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, { quantity: e.target.value.replace(/[^\d.]/g, '') })}
                       className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
-                    <div className="text-[10px] text-slate-400 mt-1.5">Unit: {material?.unit || newMaterialUnit}</div>
+                    <div className="text-[10px] text-slate-400 mt-1.5">
+                      Unit: {material?.purchaseUnit || material?.unit || newMaterialUnit}
+                      {material && material.conversionFactor > 1 && material.purchaseUnit !== material.baseUnit && (
+                        <span className="ml-1 text-blue-600">
+                          (1 {material.purchaseUnit} = {material.conversionFactor} {material.baseUnit})
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate / Unit Cost</label>
                     <input
                       type="text"
                       inputMode="decimal"
-                      required
                       value={item.unitCost}
                       onChange={(e) => updateItem(item.id, { unitCost: e.target.value.replace(/[^\d.]/g, '') })}
                       className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div className="min-h-[42px] flex items-center rounded-xl bg-slate-50 px-3 text-xs font-semibold text-slate-700">
-                    <span>Amount: ₹{(line?.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span>Amount: ₹{lineSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <button
                     type="button"
-                    disabled={items.length === 1}
-                    onClick={() => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== item.id))}
+                    disabled={isOnlyBlankRow}
+                    onClick={() => removeItem(item.id)}
                     className="w-full md:w-auto min-h-[42px] px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 disabled:opacity-40"
                   >
                     Remove
@@ -419,7 +498,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Polypropylene White Granules"
                   value={newMaterialName}
                   onChange={(e) => setNewMaterialName(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
@@ -430,7 +508,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. PP-WHT-01"
                   value={newMaterialCode}
                   onChange={(e) => setNewMaterialCode(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
@@ -448,6 +525,67 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                   <option value="colour">Colour</option>
                   <option value="packaging">Packaging</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Base Unit</label>
+                <select
+                  value={newMaterialBaseUnit}
+                  onChange={(e) => setNewMaterialBaseUnit(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="pcs">pcs</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Purchase Unit</label>
+                <select
+                  value={newMaterialPurchaseUnit}
+                  onChange={(e) => setNewMaterialPurchaseUnit(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="pcs">pcs</option>
+                  <option value="Bag">Bag</option>
+                  <option value="Carton">Carton</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Consumption Unit</label>
+                <select
+                  value={newMaterialConsumptionUnit}
+                  onChange={(e) => setNewMaterialConsumptionUnit(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="pcs">pcs</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Conversion Factor</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={newMaterialConversionFactor}
+                  onChange={(e) => setNewMaterialConversionFactor(parseFloat(e.target.value) || 1)}
+                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Pieces per {newMaterialBaseUnit}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newMaterialPiecesPerBaseUnit}
+                  onChange={(e) => setNewMaterialPiecesPerBaseUnit(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                />
               </div>
             </div>
           )}
@@ -487,9 +625,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             <span className="font-bold">Stock Maintenance Rule:</span>{' '}
             {status === 'received'
               ? 'Saving this purchase as Received will automatically add ' +
-                purchaseItems.reduce((sum, item) => sum + item.quantity, 0).toLocaleString() +
+                validPurchaseItems.reduce((sum, item) => sum + item.quantity, 0).toLocaleString() +
                 ' ' +
-                ' across ' + purchaseItems.length + ' line item(s) to the Raw Materials inventory.'
+                ' across ' + validPurchaseItems.length + ' line item(s) to the Raw Materials inventory.'
               : 'This purchase will be saved as Pending. Stock will be added to Raw Materials inventory only when marked as Received later.'}
           </div>
         </div>
@@ -529,7 +667,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           <label className="block text-xs font-semibold text-slate-700 mb-1">Purchase Notes (Optional)</label>
           <input
             type="text"
-            placeholder="e.g. Invoice / Delivery Challan number, batch grade info..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"

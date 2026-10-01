@@ -182,6 +182,7 @@ export function App() {
               <FinishedGoods
                 key={`fg-${refreshKey}`}
                 onOpenAddFinishedGoodsModal={() => setIsAddFinishedGoodsOpen(true)}
+                onStockAdded={triggerRefresh}
               />
             }
           />

@@ -79,8 +79,9 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
     );
   }
 
-  const totalSpent = customerOrders.reduce((sum, o) => sum + o.totalAmount, 0) || customer.totalSpent;
-  const avgOrderValue = customerOrders.length > 0 ? totalSpent / customerOrders.length : 0;
+  const regularOrders = customerOrders.filter((o) => o.orderType !== 'AS');
+  const totalSpent = regularOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const avgOrderValue = regularOrders.length > 0 ? totalSpent / regularOrders.length : 0;
 
   return (
     <div className="space-y-6">
@@ -133,7 +134,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Spent</div>
           <div className="text-2xl font-bold text-slate-900 mt-2">₹{totalSpent.toLocaleString()}</div>
-          <div className="text-[11px] text-slate-400 mt-1">Lifetime order volume</div>
+          <div className="text-[11px] text-slate-400 mt-1">Commercial order volume</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
@@ -145,7 +146,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Average Order Value</div>
           <div className="text-2xl font-bold text-slate-900 mt-2">₹{avgOrderValue.toFixed(0).toLocaleString()}</div>
-          <div className="text-[11px] text-slate-400 mt-1">Per transaction</div>
+          <div className="text-[11px] text-slate-400 mt-1">Per commercial order</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
@@ -200,6 +201,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-3">Order ID</th>
+                  <th className="py-3 px-3">Type</th>
                   <th className="py-3 px-3">Date</th>
                   <th className="py-3 px-3">Items</th>
                   <th className="py-3 px-3">Total Amount</th>
@@ -209,7 +211,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
                 {customerOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
                       No order history found for this customer.
                     </td>
                   </tr>
@@ -220,6 +222,17 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
                         <Link to={`/sales/${order.id}`} className="text-blue-600 hover:underline">
                           {order.orderNumber}
                         </Link>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                            order.orderType === 'AS'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-blue-100 text-blue-800 border border-blue-200'
+                          }`}
+                        >
+                          {order.orderType === 'AS' ? 'AS Order' : 'Regular'}
+                        </span>
                       </td>
                       <td className="py-3 px-3 text-slate-500">{order.orderDate}</td>
                       <td className="py-3 px-3">{order.items.map((i) => i.productName).join(', ')}</td>

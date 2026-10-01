@@ -72,6 +72,7 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         quantityProduced: Number(quantityProduced),
         unit: selectedProduct.unit || 'pcs',
         date,
+        source: 'Production',
         notes: notes.trim()
       });
 
@@ -166,7 +167,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           <label className="form-label">Batch Notes (Optional)</label>
           <input
             type="text"
-            placeholder="e.g. Mold Machine #2 Shift A output"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="form-input"
