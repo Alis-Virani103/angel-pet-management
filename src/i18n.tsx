@@ -125,7 +125,6 @@ const gujarati: Record<string, string> = {
   'Loading documents...': 'દસ્તાવેજો લોડ થઈ રહ્યા છે...'
   , 'New Order': 'નવો ઓર્ડર',
   'Add Goods': 'માલ ઉમેરો',
-  'Good Morning, Admin': 'સુપ્રભાત, એડમિન',
   'Finance & Accounting': 'નાણાં વ્યવસ્થા અને હિસાબ',
   'Party-wise Statement': 'પાર્ટી પ્રમાણે સ્ટેટમેન્ટ',
   'Show Filters': 'ફિલ્ટર્સ બતાવો',

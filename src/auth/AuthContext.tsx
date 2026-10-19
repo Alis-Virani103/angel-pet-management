@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { FirebaseError } from 'firebase/app';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { AUTHORITY_MODULES, AuthorityModule, EmployeeProfile, PermissionAction } from '../types';
-import { auth, db, isLiveFirebaseConfigured } from '../firebase/config';
+import { auth, db, firebaseConfig, isLiveFirebaseConfigured } from '../firebase/config';
 
 interface AuthState {
   user: User | null;
@@ -125,7 +126,14 @@ export const EmployeeAccessGate: React.FC<{ children: React.ReactNode }> = ({ ch
             try {
               await signIn(email, password);
             } catch (loginError) {
-              setError(loginError instanceof Error ? loginError.message : 'Sign-in failed.');
+              if (loginError instanceof FirebaseError && loginError.code === 'auth/configuration-not-found') {
+                setError(
+                  `Firebase Authentication is not configured for project "${firebaseConfig.projectId}". ` +
+                  'Verify this deployment uses the same Firebase project as the employee account and that Email/Password sign-in is enabled.'
+                );
+              } else {
+                setError(loginError instanceof Error ? loginError.message : 'Sign-in failed.');
+              }
             } finally {
               setSubmitting(false);
             }

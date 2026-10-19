@@ -140,6 +140,37 @@ const STORAGE_KEYS = {
   PAYMENT_REMINDERS: 'angel_pet_payment_reminders'
 };
 
+const DEMO_DATA_STORAGE_KEYS = [
+  STORAGE_KEYS.CUSTOMERS,
+  STORAGE_KEYS.SUPPLIERS,
+  STORAGE_KEYS.ORDERS,
+  STORAGE_KEYS.DISPATCHES,
+  STORAGE_KEYS.PAYMENTS,
+  STORAGE_KEYS.EXPENSES,
+  STORAGE_KEYS.RAW_MATERIALS,
+  STORAGE_KEYS.RAW_MATERIAL_USAGE,
+  STORAGE_KEYS.FINISHED_GOODS_LOGS,
+  STORAGE_KEYS.DOCUMENTS,
+  STORAGE_KEYS.SETTINGS,
+  STORAGE_KEYS.PURCHASES,
+  STORAGE_KEYS.PURCHASED_MATERIALS,
+  STORAGE_KEYS.PAYMENT_REMINDERS
+];
+
+function clearDemoDataFromLocalStorage(): void {
+  if (typeof localStorage === 'undefined') return;
+
+  for (const key of DEMO_DATA_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error(`Unable to clear demo data cache ${key} from LocalStorage:`, error);
+    }
+  }
+}
+
+clearDemoDataFromLocalStorage();
+
 // Helper to interact with LocalStorage
 function getLocalItem<T>(key: string, fallback: T): T {
   try {
@@ -327,26 +358,10 @@ export async function updateCustomer(id: string, updates: Partial<Customer>): Pr
     }
     return item;
   });
-  if (!found) {
-    updated = {
-      id,
-      name: updates.name || 'Customer',
-      phone: updates.phone || '',
-      company: updates.company || 'Company',
-      address: updates.address || '',
-      customerType: updates.customerType || 'Direct Customer',
-      priceCategory: updates.priceCategory || 'A',
-      status: updates.status || 'active',
-      createdAt: new Date().toISOString().split('T')[0],
-      totalOrders: updates.totalOrders || 0,
-      totalSpent: updates.totalSpent || 0,
-      ...updates
-    };
-    newList.push(updated);
-  }
+  if (!found || !updated) throw new Error(`Customer not found: ${id}`);
   setLocalItem(STORAGE_KEYS.CUSTOMERS, newList);
 
-  if (shouldSyncToFirebase() && updated) {
+  if (shouldSyncToFirebase()) {
     const firebaseUpdates = sanitizeForFirestore(updated) as Record<string, unknown>;
     if (updates.paymentReminder === undefined && Object.prototype.hasOwnProperty.call(updates, 'paymentReminder')) {
       firebaseUpdates.paymentReminder = deleteField();
@@ -354,7 +369,7 @@ export async function updateCustomer(id: string, updates: Partial<Customer>): Pr
     await persistCloudWrite(setDoc(doc(getDb(), 'customers', id), firebaseUpdates, { merge: true }), 'Updating customer');
   }
 
-  return updated!;
+  return updated;
 }
 
 export async function deleteCustomer(id: string): Promise<void> {
@@ -644,17 +659,13 @@ export async function updateOrder(id: string, updates: Partial<Order>): Promise<
     }
     return item;
   });
-  if (!found) {
-    updated = { id, ...updates } as Order;
-    newList.push(updated);
-  }
+  if (!found || !updated) throw new Error(`Sales order not found: ${id}`);
   setLocalItem(STORAGE_KEYS.ORDERS, newList);
 
-  if (shouldSyncToFirebase() && updated) {
+  if (shouldSyncToFirebase()) {
     await persistCloudWrite(setDoc(doc(getDb(), 'orders', id), sanitizeForFirestore(updated), { merge: true }), `Updating order ${id}`);
   }
 
-  if (!updated) throw new Error('Order not found');
   return updated;
 }
 
@@ -1135,17 +1146,13 @@ export async function updateRawMaterial(id: string, updates: Partial<RawMaterial
     }
     return item;
   });
-  if (!found) {
-    updated = { id, ...updates } as RawMaterial;
-    newList.push(updated);
-  }
+  if (!found || !updated) throw new Error(`Raw material not found: ${id}`);
   setLocalItem(STORAGE_KEYS.RAW_MATERIALS, newList);
 
-  if (shouldSyncToFirebase() && updated) {
+  if (shouldSyncToFirebase()) {
     await persistCloudWrite(setDoc(doc(getDb(), 'rawMaterials', id), updated, { merge: true }), 'Updating raw material');
   }
 
-  if (!updated) throw new Error('Raw material not found');
   return updated;
 }
 

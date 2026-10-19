@@ -164,9 +164,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Header Banner & Action Buttons */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Good Morning, Admin')}</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('Dashboard')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Here's what's happening at Angel Pet packaging plant today.
+            Business overview for today.
           </p>
         </div>
 

@@ -23,6 +23,7 @@ interface DraftOrderItem {
   sellByPacket: boolean;
   packetCount: number | string;
   loosePieces: number | string;
+  isCombo: boolean;
   selectedInnerId?: string; // id of selected inner product or ''
   selectedCapId?: string; // id of selected cap product or ''
 }
@@ -34,6 +35,7 @@ const createDraftItem = (productId = '', id = `line-${Date.now()}-${Math.random(
   sellByPacket: false,
   packetCount: '',
   loosePieces: '',
+  isCombo: false,
   selectedInnerId: '',
   selectedCapId: ''
 });
@@ -162,13 +164,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     }
   };
 
+  const getComboComponents = (item: DraftOrderItem, product: Product | undefined) => {
+    if (!item.isCombo || product?.type !== 'bottle') {
+      return { innerProduct: null, capProduct: null };
+    }
+
+    return {
+      innerProduct: products.find((candidate) => candidate.id === item.selectedInnerId && candidate.type === 'inner') || null,
+      capProduct: products.find((candidate) => candidate.id === item.selectedCapId && candidate.type === 'cap') || null
+    };
+  };
+
   const isItemComplete = (item: DraftOrderItem): boolean => {
     if (!item.productId) return false;
     const product = products.find((p) => p.id === item.productId);
     if (!product) return false;
 
-    const innerProduct = item.selectedInnerId ? products.find((p) => p.id === item.selectedInnerId) : null;
-    const capProduct = item.selectedCapId ? products.find((p) => p.id === item.selectedCapId) : null;
+    const { innerProduct, capProduct } = getComboComponents(item, product);
 
     const autoRate = calculateEffectiveItemRate({
       product,
@@ -271,8 +283,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       const product = products.find((candidate) => candidate.id === item.productId);
       if (!product) return null;
 
-      const innerProduct = item.selectedInnerId ? products.find((p) => p.id === item.selectedInnerId) : null;
-      const capProduct = item.selectedCapId ? products.find((p) => p.id === item.selectedCapId) : null;
+      const { innerProduct, capProduct } = getComboComponents(item, product);
 
       const unitsPerPacket = getProductUnitsPerPacket(product);
       const isPacketMode = Boolean(item.sellByPacket && unitsPerPacket);
@@ -488,7 +499,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       packetCount: '',
       loosePieces: '',
       selectedInnerId: '',
-      selectedCapId: ''
+      selectedCapId: '',
+      isCombo: false
     });
     setProductSearches((currentSearches) => ({ ...currentSearches, [itemId]: '' }));
     setFocusedProductItemId(itemId);
@@ -501,8 +513,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     let defaultInnerId = '';
     let defaultCapId = '';
     if (product && product.type === 'bottle') {
-      defaultInnerId = product.compatibleInnerId || '';
-      defaultCapId = product.compatibleCapId || '';
+      defaultInnerId = products.some((candidate) => candidate.id === product.compatibleInnerId && candidate.type === 'inner')
+        ? product.compatibleInnerId || ''
+        : '';
+      defaultCapId = products.some((candidate) => candidate.id === product.compatibleCapId && candidate.type === 'cap')
+        ? product.compatibleCapId || ''
+        : '';
     }
 
     const unitsPerPacket = getProductUnitsPerPacket(product);
@@ -518,6 +534,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       productId,
       sellByPacket: Boolean(oldItem?.sellByPacket && unitsPerPacket),
       packetCount: initialPacketCount,
+      isCombo: Boolean(defaultInnerId || defaultCapId),
       selectedInnerId: defaultInnerId,
       selectedCapId: defaultCapId
     };
@@ -579,8 +596,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     const invalidPriceItem = validItems.find((item) => {
       const product = products.find((candidate) => candidate.id === item.productId);
       if (!product) return true;
-      const innerProduct = item.selectedInnerId ? products.find((p) => p.id === item.selectedInnerId) : null;
-      const capProduct = item.selectedCapId ? products.find((p) => p.id === item.selectedCapId) : null;
+      const { innerProduct, capProduct } = getComboComponents(item, product);
       const rate = calculateEffectiveItemRate({
         product,
         category: priceCategory,
@@ -984,8 +1000,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           <div className="space-y-2.5">
             {items.map((item, index) => {
               const product = products.find((candidate) => candidate.id === item.productId);
-              const innerProduct = item.selectedInnerId ? products.find((p) => p.id === item.selectedInnerId) : null;
-              const capProduct = item.selectedCapId ? products.find((p) => p.id === item.selectedCapId) : null;
+              const { innerProduct, capProduct } = getComboComponents(item, product);
 
               const effectiveRate = calculateEffectiveItemRate({
                 product: product!,
@@ -1023,7 +1038,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               });
 
               const isBottle = product?.type === 'bottle';
-              const hasComboConfigured = isBottle && (innerProduct || capProduct);
+              const hasComboConfigured = Boolean(isBottle && (innerProduct || capProduct));
               const configuredComboPrice = isBottle && innerProduct && capProduct ? getBottleComboPrice(product, priceCategory) : null;
 
               return (
@@ -1362,6 +1377,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                     </div>
                   </div>
 
+                  {isBottle && (
+                    <label className="flex items-start gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={item.isCombo}
+                        onChange={(event) => updateItem(item.id, { isCombo: event.target.checked })}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-bold text-indigo-900">Combo</span>
+                        <span className="block mt-0.5 text-[11px] leading-4 text-indigo-700">
+                          When checked, include selected bottle components in combo pricing and order details.
+                        </span>
+                      </span>
+                    </label>
+                  )}
+
                   {/* Bottle Component Selections (Inner & Cap) */}
                   {isBottle && (
                     <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-2">
@@ -1413,27 +1445,35 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           </select>
                         </div>
                       </div>
+                    </div>
+                  )}
 
-                      {/* Informative component breakdown note */}
-                      {hasComboConfigured && (
-                        <div className="text-[11px] text-blue-800 font-medium pt-1 flex items-center flex-wrap gap-2">
-                          <span className="font-bold text-blue-900">
-                            Included:
-                          </span>
+                  {isBottle && item.isCombo && (
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-900">
+                        Combo Configuration
+                      </div>
+                      {hasComboConfigured ? (
+                        <div className="text-[11px] text-indigo-800 font-medium flex items-center flex-wrap gap-2">
+                          <span className="font-bold text-indigo-900">Included:</span>
                           {innerProduct && (
-                            <span className="bg-white/80 px-2 py-0.5 rounded border border-blue-200/60">
+                            <span className="bg-white/80 px-2 py-0.5 rounded border border-indigo-200/60">
                               Inner: {innerProduct.name} × {itemQuantity.toLocaleString()}
                             </span>
                           )}
                           {capProduct && (
-                            <span className="bg-white/80 px-2 py-0.5 rounded border border-blue-200/60">
+                            <span className="bg-white/80 px-2 py-0.5 rounded border border-indigo-200/60">
                               Cap: {capProduct.name} × {itemQuantity.toLocaleString()}
                             </span>
                           )}
-                          <span className="text-[10px] text-blue-600 italic">
+                          <span className="text-[10px] text-indigo-600 italic">
                             (Billed as 1 combo item @ ₹{unitPrice.toFixed(2)})
                           </span>
                         </div>
+                      ) : (
+                        <p className="text-[11px] text-indigo-700">
+                          Select an Inner Liner or Cap / Closure above to configure this combo.
+                        </p>
                       )}
                     </div>
                   )}

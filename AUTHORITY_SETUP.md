@@ -8,6 +8,13 @@ This feature uses Firebase Authentication email/password accounts, Firestore emp
 2. In **Authentication → Sign-in method**, enable **Email/Password**.
 3. In **Project settings → General**, add the web app configuration to the deployment environment as `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, and `VITE_FIREBASE_APP_ID`.
 4. Ensure the application is pointed at the same project used for the existing company data. This implementation does not migrate or delete business records.
+5. For Vercel, set all six `VITE_FIREBASE_*` values in the relevant deployment environments and redeploy after changing them. The values must all come from the same Firebase web app/project. In **Authentication → Sign-in method**, enable **Email/Password**. Add the deployed hostname in **Authentication → Settings → Authorized domains**.
+
+## Sign-in troubleshooting
+
+- If localhost opens directly but the deployed site asks you to sign in, localhost may already have a signed-in Firebase session saved in that browser. Sign out there or open a private window to check the signed-out flow; this is not an authentication bypass.
+- `auth/configuration-not-found` means the Firebase project used by the site has no usable email/password sign-in configuration. Check that Vercel's `VITE_FIREBASE_PROJECT_ID`, API key, and other web-app settings point to the same project where the employee account was created, and confirm Email/Password is enabled. After correcting Vercel environment variables, redeploy the site.
+- If the settings are correct but the account is rejected, verify that the email exists in **Authentication → Users** in that same project and reset its password if necessary.
 
 ## 2. Provision the first owner
 
