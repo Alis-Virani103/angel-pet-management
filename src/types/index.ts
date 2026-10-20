@@ -15,8 +15,8 @@ export interface CustomerPaymentReminder {
 export interface Customer {
   id: string;
   name: string;
-  phone: string;
-  company: string;
+  phone?: string;
+  company?: string;
   address: string;
   customerType: CustomerType;
   priceCategory: PriceCategory;
@@ -63,8 +63,8 @@ export type SupplierStatus = 'active' | 'inactive';
 export interface Supplier {
   id: string;
   name: string;
-  company: string;
-  phone: string;
+  company?: string;
+  phone?: string;
   address: string;
   status: SupplierStatus;
   createdAt: string;

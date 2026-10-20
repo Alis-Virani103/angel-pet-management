@@ -715,9 +715,9 @@ export const Finance: React.FC<FinanceProps> = ({
     ? [{ id: ALL_PARTIES_ID, name: t('All Customers'), contact: '', phone: '' }, ...customers
         .filter((customer) => {
           const query = partySearch.trim().toLowerCase();
-          return !query || customer.company.toLowerCase().includes(query) || customer.name.toLowerCase().includes(query) || customer.phone.toLowerCase().includes(query);
+          return !query || (customer.company || '').toLowerCase().includes(query) || customer.name.toLowerCase().includes(query) || (customer.phone || '').toLowerCase().includes(query);
         })
-        .map((customer) => ({ id: customer.id, name: customer.company || customer.name, contact: customer.name, phone: customer.phone }))]
+        .map((customer) => ({ id: customer.id, name: customer.company || customer.name, contact: customer.name, phone: customer.phone || '' }))]
     : [{ id: ALL_PARTIES_ID, name: t('All Suppliers'), contact: '', phone: '' }, ...Array.from(new Set(purchases.map((purchase) => purchase.supplierName).filter(Boolean)))
         .filter((supplier) => supplier.toLowerCase().includes(partySearch.trim().toLowerCase()))
         .map((supplier) => ({ id: supplier, name: supplier, contact: '', phone: '' }))];

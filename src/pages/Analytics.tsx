@@ -287,7 +287,7 @@ export const Analytics: React.FC = () => {
     if (!customerSearch) return clientAnalytics;
     return clientAnalytics.filter(c => 
       c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.company.toLowerCase().includes(customerSearch.toLowerCase())
+      (c.company || '').toLowerCase().includes(customerSearch.toLowerCase())
     );
   }, [clientAnalytics, customerSearch]);
 
@@ -304,7 +304,7 @@ export const Analytics: React.FC = () => {
     .filter((customer) => customer.totalOrders > 0)
     .slice(0, 5)
     .map((c) => ({
-      name: c.company.length > 12 ? `${c.company.substring(0, 12)}...` : c.company,
+      name: (c.company || c.name).length > 12 ? `${(c.company || c.name).substring(0, 12)}...` : (c.company || c.name),
       Revenue: c.totalRevenue
     }));
 
@@ -560,7 +560,7 @@ export const Analytics: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <h3 className="font-semibold text-slate-900 text-sm">{customer.name}</h3>
-                  <p className="text-xs text-slate-500">{customer.company}</p>
+                  <p className="text-xs text-slate-500">{customer.company || '—'}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
@@ -662,7 +662,7 @@ export const Analytics: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">{selectedCustomer.name}</h2>
-                  <p className="text-sm text-slate-500">{selectedCustomer.company}</p>
+                  <p className="text-sm text-slate-500">{selectedCustomer.company || '—'}</p>
                 </div>
                 <button
                   onClick={() => setSelectedCustomer(null)}
@@ -808,7 +808,7 @@ export const Analytics: React.FC = () => {
                                 <tr key={item.customer.id} className="border-b border-slate-100">
                                   <td className="py-3 px-4 text-sm text-slate-900">
                                     {item.customer.name}
-                                    <span className="text-xs text-slate-500 block">{item.customer.company}</span>
+                                    <span className="text-xs text-slate-500 block">{item.customer.company || '—'}</span>
                                   </td>
                                   <td className="py-3 px-4 text-sm text-slate-900 text-right">{item.quantity.toLocaleString()}</td>
                                   <td className="py-3 px-4 text-sm text-slate-900 text-right">₹{item.revenue.toLocaleString()}</td>

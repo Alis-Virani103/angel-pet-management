@@ -279,7 +279,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                         {selectedDispatch.customerName}
                       </div>
                       {linkedOrder && (
-                        <div style={{ color: '#475569', fontSize: '10px' }}>Company: {linkedOrder.companyName}</div>
+                        <div style={{ color: '#475569', fontSize: '10px' }}>Company: {linkedOrder.companyName || '—'}</div>
                       )}
                     </div>
                   </td>
@@ -535,7 +535,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                       <div style={{ fontWeight: '800', fontSize: '13px', color: '#0f172a', marginBottom: '2px' }}>
                         {linkedOrder.customerName}
                       </div>
-                      <div style={{ color: '#475569', fontSize: '10px' }}>Company: {linkedOrder.companyName}</div>
+                      <div style={{ color: '#475569', fontSize: '10px' }}>Company: {linkedOrder.companyName || '—'}</div>
                     </div>
                   </td>
                   <td style={{ width: '50%', verticalAlign: 'top', paddingLeft: '8px' }}>
@@ -670,7 +670,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                         Consignee Final Acknowledgment
                       </div>
                       <div style={{ fontSize: '8px', color: '#64748b' }}>
-                        {linkedOrder.customerName} ({linkedOrder.companyName})
+                        {linkedOrder.customerName} ({linkedOrder.companyName || '—'})
                       </div>
                     </div>
                   </td>

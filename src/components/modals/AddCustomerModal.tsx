@@ -61,8 +61,8 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !company.trim()) {
-      setError('Name, company name, and phone number are required.');
+    if (!name.trim()) {
+      setError('Customer / contact person name is required.');
       return;
     }
     if (paymentReminderEnabled && !paymentReminderDate) {
@@ -104,8 +104,8 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
       } else {
         await addCustomer({
           name: name.trim(),
-          company: company.trim(),
-          phone: phone.trim(),
+          company: company.trim() || undefined,
+          phone: phone.trim() || undefined,
           address: address.trim(),
           customerType,
           priceCategory,
@@ -153,10 +153,9 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
           </div>
 
           <div>
-            <label className="form-label">Company Name</label>
+            <label className="form-label">Company Name (Optional)</label>
             <input
               type="text"
-              required
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               className="form-input"
@@ -166,10 +165,9 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="form-label">Phone Number</label>
+            <label className="form-label">Phone Number (Optional)</label>
             <input
               type="text"
-              required
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="form-input"

@@ -443,7 +443,7 @@ export function generateInvoiceHtml(
       <div style="font-size: 8px; font-weight: 700; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px;">
         ${isGst ? 'Bill To' : 'Customer Details'}
       </div>
-      <div style="font-weight: 700; font-size: 12px; color: #0f172a;">${order.companyName}</div>
+      <div style="font-weight: 700; font-size: 12px; color: #0f172a;">${order.companyName || '—'}</div>
       <div style="color: #475569; font-size: 9.5px; margin-top: 1px;">Attn: ${order.customerName}</div>
       ${isGst && customerGstin ? `
         <div style="color: #0f172a; font-size: 9.5px; margin-top: 2px; font-weight: 600;">

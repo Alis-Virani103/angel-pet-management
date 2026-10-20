@@ -303,8 +303,13 @@ export async function getCustomers(): Promise<Customer[]> {
     ['finance', 'view']
   ]);
   const items = await getCloudItems<Customer>('customers');
-  setLocalItem(STORAGE_KEYS.CUSTOMERS, items);
-  return items;
+  const customers = items.map((customer) => ({
+    ...customer,
+    company: customer.company || '',
+    phone: customer.phone || ''
+  }));
+  setLocalItem(STORAGE_KEYS.CUSTOMERS, customers);
+  return customers;
 }
 
 export async function addCustomer(data: Omit<Customer, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'> & { id?: string }): Promise<Customer> {
@@ -392,7 +397,14 @@ export async function getSuppliers(): Promise<Supplier[]> {
   } catch (error) {
     if (!(error instanceof Error) || !error.message.startsWith('Permission denied:')) throw error;
   }
-  const byCompany = new Map(saved.map((supplier) => [supplier.company.toLowerCase(), supplier]));
+  const normalizedSaved = saved.map((supplier) => ({
+    ...supplier,
+    company: supplier.company || '',
+    phone: supplier.phone || ''
+  }));
+  const byCompany = new Map(normalizedSaved
+    .filter((supplier) => supplier.company)
+    .map((supplier) => [(supplier.company || '').toLowerCase(), supplier]));
   const suppliers = new Map<string, Supplier>();
 
   purchases.forEach((purchase) => {
@@ -417,8 +429,9 @@ export async function getSuppliers(): Promise<Supplier[]> {
     });
   });
 
-  saved.forEach((supplier) => {
-    if (!suppliers.has(supplier.company.toLowerCase())) suppliers.set(supplier.company.toLowerCase(), supplier);
+  normalizedSaved.forEach((supplier) => {
+    const key = supplier.company ? supplier.company.toLowerCase() : `supplier:${supplier.id}`;
+    if (!suppliers.has(key)) suppliers.set(key, supplier);
   });
 
   const result = Array.from(suppliers.values());
@@ -439,7 +452,7 @@ export async function addSupplier(data: Omit<Supplier, 'id' | 'createdAt' | 'tot
   const list = getLocalItem<Supplier[]>(STORAGE_KEYS.SUPPLIERS, []);
   setLocalItem(STORAGE_KEYS.SUPPLIERS, [supplier, ...list]);
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'suppliers', supplier.id), supplier), 'Adding supplier');
+    await persistCloudWrite(setDoc(doc(getDb(), 'suppliers', supplier.id), sanitizeForFirestore(supplier)), 'Adding supplier');
   }
   return supplier;
 }
@@ -452,7 +465,7 @@ export async function updateSupplier(id: string, updates: Partial<Supplier>): Pr
   const updated = { ...current, ...updates };
   setLocalItem(STORAGE_KEYS.SUPPLIERS, list.map((supplier) => supplier.id === id ? updated : supplier));
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'suppliers', id), updated, { merge: true }), 'Updating supplier');
+    await persistCloudWrite(setDoc(doc(getDb(), 'suppliers', id), sanitizeForFirestore(updated), { merge: true }), 'Updating supplier');
   }
   return updated;
 }

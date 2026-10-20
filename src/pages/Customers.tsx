@@ -54,7 +54,7 @@ export const Customers: React.FC<CustomersProps> = ({
   const handleToggleStatus = async (customer: Customer) => {
     const isDeactivating = customer.status === 'active';
     const actionName = isDeactivating ? 'deactivate' : 'activate';
-    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company} (${customer.name})?`)) {
+    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company || customer.name} (${customer.name})?`)) {
       const newStatus: CustomerStatus = isDeactivating ? 'inactive' : 'active';
       try {
         await updateCustomer(customer.id, { status: newStatus });
@@ -69,8 +69,8 @@ export const Customers: React.FC<CustomersProps> = ({
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       c.name.toLowerCase().includes(q) ||
-      c.company.toLowerCase().includes(q) ||
-      c.phone.includes(q);
+      (c.company || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q);
 
     const matchesType = typeFilter === 'all' || c.customerType === typeFilter;
     const matchesTier = tierFilter === 'all' || c.priceCategory === tierFilter;
@@ -195,10 +195,10 @@ export const Customers: React.FC<CustomersProps> = ({
                       <div className="font-bold text-slate-900">{cus.name}</div>
                       <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{cus.company}</span>
+                        <span>{cus.company || '—'}</span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 font-mono text-slate-600">{cus.phone}</td>
+                    <td className="py-3.5 px-4 font-mono text-slate-600">{cus.phone || '—'}</td>
                     <td className="py-3.5 px-4 text-slate-600">{cus.customerType}</td>
                     <td className="py-3.5 px-4">
                       <span className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 font-bold text-[11px]">

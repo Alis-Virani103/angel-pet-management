@@ -267,9 +267,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     const searchText = customerSearch.trim().toLowerCase();
     if (!searchText) return true;
     return [
-      candidate.name,
-      candidate.company,
-      candidate.phone,
+      candidate.name || '',
+      candidate.company || '',
+      candidate.phone || '',
       candidate.priceCategory,
       `tier ${candidate.priceCategory}`,
       `category ${candidate.priceCategory}`
@@ -667,17 +667,17 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       let targetCustomer: Customer | undefined;
 
       if (isInlineCustomer) {
-        if (!newCustomerName || !newCustomerCompany) {
+        if (!newCustomerName.trim()) {
           if (printWin && !printWin.closed) printWin.close();
-          setError('Please enter inline customer details.');
+          setError('Please enter the customer / contact person name.');
           setSubmittingMode(null);
           isSubmittingRef.current = false;
           return;
         }
         const createdCustomer = await addCustomer({
           name: newCustomerName,
-          company: newCustomerCompany,
-          phone: newCustomerPhone || '+91 90000 00000',
+          company: newCustomerCompany.trim() || undefined,
+          phone: newCustomerPhone.trim() || undefined,
           address: 'Main Office',
           customerType: 'Direct Customer',
           priceCategory,
@@ -685,13 +685,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         });
         finalCustomerId = createdCustomer.id;
         finalCustomerName = createdCustomer.name;
-        finalCompanyName = createdCustomer.company;
+        finalCompanyName = createdCustomer.company || '';
         targetCustomer = createdCustomer;
       } else {
         const cus = customers.find((c) => c.id === selectedCustomerId);
         if (cus) {
           finalCustomerName = cus.name;
-          finalCompanyName = cus.company;
+          finalCompanyName = cus.company || '';
           targetCustomer = cus;
         }
       }
@@ -883,7 +883,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   aria-label={t('Search and select customer')}
                   aria-expanded={isCustomerSearchFocused}
                   aria-controls="customer-options-list"
-                  value={isCustomerSearchFocused ? customerSearch : (selectedCustomer ? `${selectedCustomer.name} — ${selectedCustomer.company} — Tier ${selectedCustomer.priceCategory}` : '')}
+                  value={isCustomerSearchFocused ? customerSearch : (selectedCustomer ? `${selectedCustomer.name}${selectedCustomer.company ? ` — ${selectedCustomer.company}` : ''} — Tier ${selectedCustomer.priceCategory}` : '')}
                   placeholder={t('Search customer by name, company, phone, or tier...')}
                   onFocus={() => {
                     setIsCustomerSearchFocused(true);
@@ -925,16 +925,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           className={`w-full rounded-xl px-3.5 py-2.5 text-left text-xs transition-colors hover:bg-blue-50 ${isSelected ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-800'}`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-slate-900">
-                              {candidate.name} — {candidate.company} — Tier {candidate.priceCategory}
+                                            <span className="font-bold text-slate-900">
+                                              {candidate.name}{candidate.company ? ` — ${candidate.company}` : ''} — Tier {candidate.priceCategory}
                             </span>
                             <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-blue-100 text-blue-700 shrink-0">
                               Tier {candidate.priceCategory}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-slate-500">
-                            <span>{candidate.company}</span>
-                            <span>{candidate.phone}</span>
+                            <span>{candidate.company || '—'}</span>
+                            <span>{candidate.phone || '—'}</span>
                           </div>
                         </button>
                       );
@@ -950,10 +950,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="form-label">{t('Company Name')}</label>
+                <label className="form-label">{t('Company Name')} (Optional)</label>
                 <input
                   type="text"
-                  required
                   value={newCustomerCompany}
                   onChange={(e) => setNewCustomerCompany(e.target.value)}
                   className="form-input bg-white"

@@ -447,7 +447,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <div className="font-semibold text-slate-900">{order.customerName}</div>
                       <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{order.companyName}</span>
+                        <span>{order.companyName || order.customerName || '—'}</span>
                       </div>
                     </td>
                     <td className="py-3 px-3">
@@ -498,7 +498,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       #{idx + 1}
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">{cus.company}</p>
+                      <p className="text-xs font-bold text-slate-800">{cus.company || cus.name}</p>
                       <p className="text-[11px] text-slate-400">{cus.totalOrders} orders placed</p>
                     </div>
                   </div>

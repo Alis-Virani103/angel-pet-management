@@ -330,7 +330,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
           <div style={S.infoBox}>
             <div style={S.infoLabel}>{isGst ? 'Bill To' : 'Customer Details'}</div>
             <div style={{ fontWeight: 700, fontSize: '12px', color: '#0f172a' }}>
-              {order.companyName}
+              {order.companyName || '—'}
             </div>
             <div style={{ color: '#475569', fontSize: '9.5px', marginTop: '1px' }}>Attn: {order.customerName}</div>
             {isGst && customerGstin && (
@@ -675,7 +675,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               <span>Customer Information</span>
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900">{order.companyName}</p>
+              <p className="text-sm font-bold text-slate-900">{order.companyName || '—'}</p>
               <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                 <User className="w-3.5 h-3.5 text-slate-400" />
                 Contact: {order.customerName}

@@ -32,15 +32,15 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({ isOpen, onCl
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !company.trim()) {
-      setError('Contact name and company name are required.');
+    if (!name.trim()) {
+      setError('Supplier / contact person name is required.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const data = { name: name.trim(), company: company.trim(), phone: phone.trim(), address: address.trim(), status };
-      if (initialSupplier) await updateSupplier(initialSupplier.id, data);
+      const data = { name: name.trim(), company: company.trim() || undefined, phone: phone.trim(), address: address.trim(), status };
+      if (initialSupplier) await updateSupplier(initialSupplier.id, { ...data, company: company.trim() });
       else await addSupplier(data);
       onSupplierSaved?.();
       onClose();
@@ -58,7 +58,7 @@ export const AddSupplierModal: React.FC<AddSupplierModalProps> = ({ isOpen, onCl
         {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" /><span>{error}</span></div>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div><label className="form-label">Supplier / Contact Person</label><input required value={name} onChange={(e) => setName(e.target.value)} className="form-input" /></div>
-          <div><label className="form-label">Company Name</label><input required value={company} onChange={(e) => setCompany(e.target.value)} className="form-input" /></div>
+          <div><label className="form-label">Company Name (Optional)</label><input value={company} onChange={(e) => setCompany(e.target.value)} className="form-input" /></div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div><label className="form-label">Phone Number (Optional)</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="form-input" /></div>

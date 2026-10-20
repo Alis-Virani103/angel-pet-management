@@ -43,7 +43,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
       if (found) {
         setCustomer(found);
         const filteredOrd = ordList.filter(
-          (o) => o.customerId === found.id || o.companyName === found.company
+          (o) => o.customerId === found.id || (!!found.company && o.companyName === found.company)
         );
         setCustomerOrders(filteredOrd);
       }
@@ -58,7 +58,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
     if (!customer) return;
     const isDeactivating = customer.status === 'active';
     const actionName = isDeactivating ? 'deactivate' : 'activate';
-    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company} (${customer.name})?`)) {
+    if (window.confirm(`Are you sure you want to ${actionName} ${customer.company || customer.name} (${customer.name})?`)) {
       const newStatus: CustomerStatus = isDeactivating ? 'inactive' : 'active';
       try {
         const updated = await updateCustomer(customer.id, { status: newStatus });
@@ -101,13 +101,13 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
           </Link>
           <div>
             <div className="flex items-center space-x-3">
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{customer.company}</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{customer.company || 'Customer Account'}</h1>
               <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-bold">
                 Category {customer.priceCategory}
               </span>
               <Badge status={customer.status} size="md" />
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">Contact: {customer.name} • {customer.phone}</p>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Contact: {customer.name}{customer.phone ? ` • ${customer.phone}` : ''}</p>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
               <Building className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold text-slate-800 block">Company Name</span>
-                <span>{customer.company}</span>
+                <span>{customer.company || '—'}</span>
               </div>
             </div>
             <div className="flex items-start space-x-2">
@@ -185,7 +185,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
               <Phone className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold text-slate-800 block">Phone</span>
-                <span>{customer.phone}</span>
+                <span>{customer.phone || '—'}</span>
               </div>
             </div>
             <div className="flex items-start space-x-2">

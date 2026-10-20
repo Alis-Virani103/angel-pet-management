@@ -9,7 +9,7 @@ import { ref, uploadBytes } from 'firebase/storage';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-import { addCustomer, addFinishedGoodsLog, addOrder, addPayment, addDispatch, addPurchase, getOrders, getPayments, getRawMaterials, getPurchases, getProducts, recordPurchasePayment, recordRawMaterialUsage, savePaymentReminder, updateDispatchStatus, updatePurchaseStatus } from '../../src/services/db';
+import { addCustomer, addFinishedGoodsLog, addOrder, addPayment, addDispatch, addPurchase, addSupplier, getCustomers, getOrders, getPayments, getRawMaterials, getPurchases, getProducts, getSuppliers, recordPurchasePayment, recordRawMaterialUsage, savePaymentReminder, updateCustomer, updateDispatchStatus, updatePurchaseStatus, updateSupplier } from '../../src/services/db';
 import {
   auth as configuredAuth,
   db as configuredDb,
@@ -140,6 +140,71 @@ afterAll(async () => {
 afterEach(cleanup);
 
 describe('isolated Firebase emulator workflows', () => {
+  it('saves customers and suppliers with optional phone and company details', async () => {
+    const customerWithoutContactDetails = await addCustomer({
+      id: `QA-CUS-OPTIONAL-${testSuffix}`,
+      name: 'Customer without contact details',
+      address: 'Emulator fixture',
+      customerType: 'Direct Customer',
+      priceCategory: 'A',
+      status: 'active'
+    });
+    const customerWithoutContactSnapshot = await adminDb.doc(`customers/${customerWithoutContactDetails.id}`).get();
+    expect(customerWithoutContactSnapshot.data()).not.toHaveProperty('phone');
+    expect(customerWithoutContactSnapshot.data()).not.toHaveProperty('company');
+    expect((await getCustomers()).find((customer) => customer.id === customerWithoutContactDetails.id)).toMatchObject({
+      phone: '',
+      company: ''
+    });
+
+    const customerWithContactDetails = await addCustomer({
+      id: `QA-CUS-CONTACT-${testSuffix}`,
+      name: 'Customer with contact details',
+      phone: '9876543210',
+      company: 'Synthetic customer company',
+      address: 'Emulator fixture',
+      customerType: 'Direct Customer',
+      priceCategory: 'A',
+      status: 'active'
+    });
+    await updateCustomer(customerWithContactDetails.id, {
+      phone: '9123456780',
+      company: 'Updated synthetic customer company'
+    });
+    expect((await adminDb.doc(`customers/${customerWithContactDetails.id}`).get()).data()).toMatchObject({
+      phone: '9123456780',
+      company: 'Updated synthetic customer company'
+    });
+
+    const supplierWithoutCompany = await addSupplier({
+      name: 'Supplier without company',
+      address: 'Emulator fixture',
+      status: 'active'
+    });
+    expect((await adminDb.doc(`suppliers/${supplierWithoutCompany.id}`).get()).data()).not.toHaveProperty('company');
+    await updateSupplier(supplierWithoutCompany.id, { company: 'Added supplier company' });
+
+    const supplierWithCompany = await addSupplier({
+      name: 'Supplier with company',
+      company: 'Synthetic supplier company',
+      phone: '9988776655',
+      address: 'Emulator fixture',
+      status: 'active'
+    });
+    await updateSupplier(supplierWithCompany.id, { company: '', phone: '' });
+
+    const suppliers = await getSuppliers();
+    expect(suppliers.find((supplier) => supplier.id === supplierWithoutCompany.id)).toMatchObject({
+      name: 'Supplier without company',
+      company: 'Added supplier company'
+    });
+    expect(suppliers.find((supplier) => supplier.id === supplierWithCompany.id)).toMatchObject({
+      name: 'Supplier with company',
+      company: '',
+      phone: ''
+    });
+  });
+
   it('does not write reminders while Finance loads, then persists an explicit reminder', async () => {
     const customerId = `QA-CUS-${testSuffix}`;
     const order = await makeOrder(customerId);
