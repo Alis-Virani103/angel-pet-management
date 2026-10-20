@@ -20,7 +20,10 @@ import {
 import { LanguageProvider } from '../../src/i18n';
 import { AuthProvider } from '../../src/auth/AuthContext';
 import { Finance } from '../../src/pages/Finance';
+import { NewPurchaseModal } from '../../src/components/modals/NewPurchaseModal';
 import { calculatePacketUnits, canProductUseFractionalPackets } from '../../src/utils/packetUtils';
+import { calculateDispatchPieces, getDispatchUnitsPerPacket } from '../../src/utils/dispatchUtils';
+import { calculatePurchasedMaterialTotals } from '../../src/utils/purchasedMaterialUtils';
 import { calculateNetProductionQuantity } from '../../src/utils/productionUtils';
 import type { Customer, Order, Product, RawMaterial } from '../../src/types';
 
@@ -140,6 +143,82 @@ afterAll(async () => {
 afterEach(cleanup);
 
 describe('isolated Firebase emulator workflows', () => {
+  it('requires and saves a supplier selected from searchable saved supplier records', async () => {
+    const renderPurchaseModal = () => render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <AuthProvider>
+            <NewPurchaseModal isOpen onClose={() => undefined} />
+          </AuthProvider>
+        </LanguageProvider>
+      </MemoryRouter>
+    );
+
+    renderPurchaseModal();
+    await waitFor(() => {
+      expect(screen.getByText(/No suppliers are saved yet/)).toBeTruthy();
+    }, { timeout: 12000 });
+    cleanup();
+
+    const supplier = await addSupplier({
+      name: 'Synthetic Purchase Contact',
+      company: 'Synthetic Purchase Company',
+      phone: '9000000000',
+      address: 'Emulator fixture',
+      status: 'active'
+    });
+    const materialId = `QA-RM-PURCHASE-${testSuffix}`;
+    await adminDb.doc(`rawMaterials/${materialId}`).set({
+      id: materialId,
+      name: 'Synthetic purchase material',
+      code: `QA-${testSuffix}`,
+      category: 'granules',
+      currentStock: 0,
+      minimumStock: 1,
+      unit: 'kg',
+      baseUnit: 'kg',
+      purchaseUnit: 'kg',
+      consumptionUnit: 'kg',
+      conversionFactor: 1,
+      unitCost: 2,
+      supplier: supplier.company || supplier.name,
+      status: 'low_stock',
+      lastRestocked: '2026-01-01'
+    });
+
+    renderPurchaseModal();
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Select a saved supplier/ });
+    await user.click(screen.getByRole('button', { name: /Select a saved supplier/ }));
+    const supplierSearch = screen.getByRole('combobox', { name: 'Search saved suppliers' });
+    await user.type(supplierSearch, 'Synthetic Purchase');
+    const supplierOption = await screen.findByRole('option', { name: /Synthetic Purchase Company/ });
+    expect(screen.queryByText(/No saved suppliers match/)).toBeNull();
+    await user.click(supplierOption);
+
+    await user.click(screen.getByRole('button', { name: /Select material/ }));
+    await user.click(await screen.findByRole('button', { name: /Synthetic purchase material/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Quantity for purchase item 1' }), '3');
+    const rateInput = screen.getByRole('textbox', { name: 'Rate for purchase item 1' });
+    await user.clear(rateInput);
+    await user.type(rateInput, '25');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Entry Delivery Status' }), 'pending');
+    await user.click(screen.getByRole('button', { name: 'Save Purchase Entry' }));
+
+    await waitFor(async () => {
+      const purchases = await getPurchases();
+      const savedPurchase = purchases.find((purchase) => purchase.supplierId === supplier.id);
+      expect(savedPurchase).toMatchObject({
+        supplierId: supplier.id,
+        supplierName: supplier.company,
+        supplierPhone: supplier.phone,
+        status: 'pending',
+        subtotal: 75
+      });
+      expect((await adminDb.doc(`suppliers/${supplier.id}`).get()).exists).toBe(true);
+    });
+  });
+
   it('saves customers and suppliers with optional phone and company details', async () => {
     const customerWithoutContactDetails = await addCustomer({
       id: `QA-CUS-OPTIONAL-${testSuffix}`,
@@ -390,6 +469,30 @@ describe('isolated Firebase emulator workflows', () => {
     expect(quantity * unitPrice).toBe(12570);
     expect(calculatePacketUnits(0.25, 500) + 3).toBe(128);
     expect(canProductUseFractionalPackets({ allowFractionalPackets: false })).toBe(false);
+  });
+
+  it('uses packet configuration across product categories and counts loose dispatch pieces once', () => {
+    const configuredProducts = (['bottle', 'cap', 'inner'] as const).map((type) => ({
+      type,
+      unitsPerPacket: 500
+    }));
+    expect(configuredProducts.map((product) => getDispatchUnitsPerPacket(undefined, product))).toEqual([500, 500, 500]);
+    expect(getDispatchUnitsPerPacket(undefined, { unitsPerPacket: 0 })).toBeUndefined();
+    expect(getDispatchUnitsPerPacket(undefined, { unitsPerPacket: 12.5 })).toBeUndefined();
+    expect(getDispatchUnitsPerPacket({ unitsPerPacket: 400 }, { unitsPerPacket: 500 })).toBe(400);
+
+    expect(calculateDispatchPieces(2, 'packets', 500, 7)).toBe(1007);
+    expect(calculateDispatchPieces(0, 'packets', 500, 7)).toBe(7);
+    expect(calculateDispatchPieces(12, 'pieces', 500, 7)).toBe(12);
+  });
+
+  it('calculates purchased material weight for bags, pieces, and packets', () => {
+    expect(calculatePurchasedMaterialTotals('bags', 3, 25)).toEqual({ totalWeightKg: 75 });
+    expect(calculatePurchasedMaterialTotals('piece_count', 200, 15)).toEqual({
+      totalWeightKg: 3,
+      totalPieces: 200
+    });
+    expect(calculatePurchasedMaterialTotals('packets', 4, 2.5)).toEqual({ totalWeightKg: 10 });
   });
 
   it('allows the owner and denies restricted-employee reminder writes in app and Firestore rules', async () => {

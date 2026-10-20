@@ -281,15 +281,16 @@ export interface PurchasedMaterial {
   id: string;
   materialName: string;
   supplier: string;
-  conversionMode?: 'pieces' | 'packets';
+  conversionMode?: 'bags' | 'piece_count' | 'pieces' | 'packets';
   packetQuantity?: number;
+  packetWeightKg?: number;
   unitsPerPacket?: number;
   totalPieces?: number;
-  numberOfBags: number;
-  weightPerBagKg: number;
+  numberOfBags?: number;
+  weightPerBagKg?: number;
   totalWeightKg: number;
-  weightPerPieceGrams: number;
-  equivalentPieces: number;
+  weightPerPieceGrams?: number;
+  equivalentPieces?: number;
   createdAt: string;
   updatedAt?: string;
 }
@@ -342,6 +343,7 @@ export interface PurchaseItem {
 export interface PurchaseOrder {
   id: string;
   purchaseNumber: string; // e.g. PO-10021
+  supplierId?: string;
   supplierName: string;
   supplierPhone?: string;
   items: PurchaseItem[];

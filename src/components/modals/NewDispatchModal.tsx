@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { Order, Dispatch, DispatchStatus, Product } from '../../types';
 import { getOrders, getDispatches, addDispatch, getProducts } from '../../services/db';
-import { getOrderDeliveryProgress, generateNextChallanNumber } from '../../utils/dispatchUtils';
-import { calculatePiecesFromPackets, getProductUnitsPerPacket, canProductUseFractionalPackets, cleanDecimalInput } from '../../utils/packetUtils';
+import { getOrderDeliveryProgress, generateNextChallanNumber, getDispatchUnitsPerPacket, calculateDispatchPieces } from '../../utils/dispatchUtils';
+import { canProductUseFractionalPackets, cleanDecimalInput } from '../../utils/packetUtils';
 import { Truck, AlertCircle, CheckCircle2, PackageCheck } from 'lucide-react';
 
 interface NewDispatchModalProps {
@@ -105,7 +105,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
       [productId]: cleaned === '' ? '' : safeVal
     }));
     const loosePieces = Number(itemLoosePieces[productId] || 0);
-    const pieces = unit === 'packets' && unitsPerPacket ? calculatePiecesFromPackets(safeVal, unitsPerPacket) + loosePieces : safeVal;
+    const pieces = calculateDispatchPieces(safeVal, unit, unitsPerPacket, loosePieces);
     if (pieces > maxLimit) {
       setError(`Only ${maxLimit.toLocaleString()} pieces remain for delivery.`);
     } else {
@@ -118,7 +118,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
     const loosePieces = cleaned === '' ? '' : Math.min(unitsPerPacket - 1, Number(cleaned));
     setItemLoosePieces((prev) => ({ ...prev, [productId]: loosePieces }));
     const packets = Number(itemQuantities[productId] || 0);
-    const pieces = calculatePiecesFromPackets(packets, unitsPerPacket) + Number(loosePieces || 0);
+    const pieces = calculateDispatchPieces(packets, 'packets', unitsPerPacket, Number(loosePieces || 0));
     setError(pieces > maxLimit ? `Only ${maxLimit.toLocaleString()} pieces remain for delivery.` : '');
   };
 
@@ -133,9 +133,12 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
 
   const totalDeliveringUnits = orderProgress?.items.reduce((sum, item) => {
     const orderItem = selectedOrder?.items.find((candidate) => candidate.productId === item.productId);
+    const product = products.find((candidate) => candidate.id === item.productId);
     const value = Number(itemQuantities[item.productId] || 0);
     const unit = itemUnits[item.productId] || 'pieces';
-    return sum + (unit === 'packets' && getProductUnitsPerPacket(orderItem) ? calculatePiecesFromPackets(value, getProductUnitsPerPacket(orderItem)!) : value);
+    const loosePieces = Number(itemLoosePieces[item.productId] || 0);
+    const unitsPerPacket = getDispatchUnitsPerPacket(orderItem, product);
+    return sum + calculateDispatchPieces(value, unit, unitsPerPacket, loosePieces);
   }, 0) || 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,13 +161,12 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
     const itemsToDispatch: Dispatch['items'] = [];
     for (const item of orderProgress.items) {
       const orderItem = selectedOrder.items.find((candidate) => candidate.productId === item.productId);
+      const product = products.find((candidate) => candidate.id === item.productId);
       const unit = itemUnits[item.productId] || 'pieces';
       const enteredValue = Number(itemQuantities[item.productId] || 0);
       const loosePieces = Number(itemLoosePieces[item.productId] || 0);
-      const unitsPerPacket = getProductUnitsPerPacket(orderItem);
-      const enteredPieces = unit === 'packets' && unitsPerPacket
-        ? calculatePiecesFromPackets(enteredValue, unitsPerPacket) + loosePieces
-        : enteredValue;
+      const unitsPerPacket = getDispatchUnitsPerPacket(orderItem, product);
+      const enteredPieces = calculateDispatchPieces(enteredValue, unit, unitsPerPacket, loosePieces);
       if (unit === 'packets' && !unitsPerPacket && enteredValue > 0) {
         setError(`Packet size is not configured for ${item.productName}; use Pieces mode.`);
         return;
@@ -173,7 +175,6 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
         setError(`Loose pieces for ${item.productName} must be a whole number from 0 to ${(unitsPerPacket || 1) - 1}.`);
         return;
       }
-      const product = products.find((candidate) => candidate.id === item.productId);
       if (unit === 'packets' && !canProductUseFractionalPackets(product) && !Number.isInteger(enteredValue)) {
         setError(`${item.productName} does not allow fractional packets.`);
         return;
@@ -297,13 +298,16 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
                   {orderProgress.items.map((item) => {
                     const orderItem = selectedOrder?.items.find((candidate) => candidate.productId === item.productId);
                     const product = products.find((candidate) => candidate.id === item.productId);
-                    const unitsPerPacket = getProductUnitsPerPacket(orderItem);
+                    const unitsPerPacket = getDispatchUnitsPerPacket(orderItem, product);
                     const canUsePackets = Boolean(unitsPerPacket);
                     const unit = itemUnits[item.productId] || 'pieces';
                     const currentEntered = itemQuantities[item.productId] ?? (unit === 'pieces' ? item.remainingQuantity : '');
-                    const enteredPieces = unit === 'packets' && unitsPerPacket
-                      ? calculatePiecesFromPackets(Number(currentEntered || 0), unitsPerPacket) + Number(itemLoosePieces[item.productId] || 0)
-                      : Number(currentEntered || 0);
+                    const enteredPieces = calculateDispatchPieces(
+                      Number(currentEntered || 0),
+                      unit,
+                      unitsPerPacket,
+                      Number(itemLoosePieces[item.productId] || 0)
+                    );
                     const isOver = enteredPieces > item.remainingQuantity;
 
                     return (

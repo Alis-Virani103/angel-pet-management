@@ -9,36 +9,27 @@ import {
   updatePurchasedMaterial
 } from '../services/db';
 import {
-  calculateEquivalentPieces,
-  calculatePiecesFromPackets,
-  calculateTotalWeightKg,
   cleanDecimalInput,
-  calculateWeightFromPieces,
   formatNumberDisplay
 } from '../utils/packetUtils';
+import { calculatePurchasedMaterialTotals, PurchasedMaterialConversionMode } from '../utils/purchasedMaterialUtils';
 import { useTranslation } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 
 type MaterialForm = {
   materialName: string;
   supplier: string;
-  conversionMode: 'pieces' | 'packets';
-  packetQuantity: string;
-  unitsPerPacket: string;
-  numberOfBags: string;
-  weightPerBagKg: string;
-  weightPerPieceGrams: string;
+  conversionMode: PurchasedMaterialConversionMode;
+  quantity: string;
+  unitWeight: string;
 };
 
 const emptyForm: MaterialForm = {
   materialName: '',
   supplier: '',
-  conversionMode: 'pieces',
-  packetQuantity: '',
-  unitsPerPacket: '',
-  numberOfBags: '',
-  weightPerBagKg: '',
-  weightPerPieceGrams: ''
+  conversionMode: 'bags',
+  quantity: '',
+  unitWeight: ''
 };
 
 export const PurchasedMaterials: React.FC = () => {
@@ -91,31 +82,31 @@ export const PurchasedMaterials: React.FC = () => {
     );
   }, [materials, searchQuery]);
 
-  const packetPieces = calculatePiecesFromPackets(Number(form.packetQuantity), Number(form.unitsPerPacket));
-  const totalPieces = form.conversionMode === 'packets'
-    ? packetPieces
-    : calculateEquivalentPieces(
-      calculateTotalWeightKg(Number(form.numberOfBags), Number(form.weightPerBagKg)),
-      Number(form.weightPerPieceGrams)
-    );
-  const totalWeightKg = form.conversionMode === 'packets'
-    ? calculateWeightFromPieces(packetPieces, Number(form.weightPerPieceGrams))
-    : calculateTotalWeightKg(Number(form.numberOfBags), Number(form.weightPerBagKg));
-  const equivalentPieces = form.conversionMode === 'packets'
-    ? totalPieces
-    : calculateEquivalentPieces(totalWeightKg, Number(form.weightPerPieceGrams));
+  const totals = calculatePurchasedMaterialTotals(
+    form.conversionMode,
+    Number(form.quantity),
+    Number(form.unitWeight)
+  );
 
   const openForm = (material?: PurchasedMaterial) => {
     setEditingMaterial(material || null);
     setForm(material ? {
       materialName: material.materialName,
       supplier: material.supplier,
-      conversionMode: material.conversionMode || 'pieces',
-      packetQuantity: material.packetQuantity === undefined ? '' : String(material.packetQuantity),
-      unitsPerPacket: material.unitsPerPacket === undefined ? '' : String(material.unitsPerPacket),
-      numberOfBags: String(material.numberOfBags),
-      weightPerBagKg: String(material.weightPerBagKg),
-      weightPerPieceGrams: String(material.weightPerPieceGrams)
+      conversionMode: material.conversionMode === 'piece_count'
+        ? 'piece_count'
+        : material.conversionMode === 'packets' ? 'packets' : 'bags',
+      quantity: String(material.conversionMode === 'packets'
+        ? material.packetQuantity ?? ''
+        : material.conversionMode === 'piece_count'
+          ? material.totalPieces ?? ''
+          : material.numberOfBags ?? ''),
+      unitWeight: String(material.conversionMode === 'packets'
+        ? material.packetWeightKg
+          ?? ((material.unitsPerPacket || 0) * (material.weightPerPieceGrams || 0) / 1000 || '')
+        : material.conversionMode === 'piece_count'
+          ? material.weightPerPieceGrams ?? ''
+          : material.weightPerBagKg ?? '')
     } : emptyForm);
     setError('');
     setIsFormOpen(true);
@@ -131,56 +122,38 @@ export const PurchasedMaterials: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const bags = Number(form.numberOfBags);
-    const bagWeight = Number(form.weightPerBagKg);
-    const packetQuantity = Number(form.packetQuantity);
-    const unitsPerPacket = Number(form.unitsPerPacket);
-    const pieceWeight = Number(form.weightPerPieceGrams);
+    const quantity = Number(form.quantity);
+    const unitWeight = Number(form.unitWeight);
 
     if (!form.materialName.trim() || !form.supplier.trim()) {
       setError('Material name and supplier are required.');
       return;
     }
-    if (!Number.isFinite(pieceWeight) || pieceWeight <= 0) {
-      setError('Weight per piece must be a positive number.');
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitWeight) || unitWeight <= 0) {
+      setError('Quantity and unit weight must be positive numbers.');
       return;
     }
-    if (form.conversionMode === 'packets' &&
-      (!Number.isFinite(packetQuantity) || packetQuantity <= 0 ||
-        !Number.isInteger(unitsPerPacket) || unitsPerPacket <= 0)) {
-      setError('Packet quantity must be positive and units per packet must be a positive whole number.');
-      return;
-    }
-    if (form.conversionMode === 'pieces' &&
-      (![bags, bagWeight].every((value) => Number.isFinite(value) && value > 0))) {
-      setError('Bag quantity and weight per bag must be positive numbers.');
+    if (form.conversionMode === 'piece_count' && !Number.isInteger(quantity)) {
+      setError('Piece quantity must be a positive whole number.');
       return;
     }
 
-    const savedTotalPieces = form.conversionMode === 'packets'
-      ? calculatePiecesFromPackets(packetQuantity, unitsPerPacket)
-      : calculateEquivalentPieces(calculateTotalWeightKg(bags, bagWeight), pieceWeight);
-    const savedTotalWeightKg = form.conversionMode === 'packets'
-      ? calculateWeightFromPieces(savedTotalPieces, pieceWeight)
-      : calculateTotalWeightKg(bags, bagWeight);
     const payload = {
       materialName: form.materialName.trim(),
       supplier: form.supplier.trim(),
       conversionMode: form.conversionMode,
-      ...(form.conversionMode === 'packets' ? {
-        packetQuantity,
-        unitsPerPacket,
-        totalPieces: savedTotalPieces,
-        numberOfBags: 0,
-        weightPerBagKg: 0
+      totalWeightKg: totals.totalWeightKg,
+      ...(form.conversionMode === 'bags' ? {
+        numberOfBags: quantity,
+        weightPerBagKg: unitWeight
+      } : form.conversionMode === 'piece_count' ? {
+        totalPieces: quantity,
+        weightPerPieceGrams: unitWeight,
+        equivalentPieces: quantity
       } : {
-        numberOfBags: bags,
-        weightPerBagKg: bagWeight,
-        totalPieces: savedTotalPieces
-      }),
-      totalWeightKg: savedTotalWeightKg,
-      weightPerPieceGrams: pieceWeight,
-      equivalentPieces: savedTotalPieces
+        packetQuantity: quantity,
+        packetWeightKg: unitWeight
+      })
     };
 
     setSaving(true);
@@ -238,20 +211,29 @@ export const PurchasedMaterials: React.FC = () => {
           <table className="w-full min-w-[900px] border-collapse text-left">
             <thead><tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
               <th className="px-4 py-3.5">Material</th><th className="px-4 py-3.5">Supplier</th><th className="px-4 py-3.5">Quantity</th>
-              <th className="px-4 py-3.5">Weight / Bag</th><th className="px-4 py-3.5">Total Weight</th><th className="px-4 py-3.5">Weight / Piece</th>
-              <th className="px-4 py-3.5">Equivalent Pieces</th><th className="px-4 py-3.5 text-right">Actions</th>
+              <th className="px-4 py-3.5">Weight per Unit</th><th className="px-4 py-3.5">Total Weight</th>
+              <th className="px-4 py-3.5">Pieces</th><th className="px-4 py-3.5 text-right">Actions</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-              {loading ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading purchased materials...</td></tr> :
-                filteredMaterials.length === 0 ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No purchased materials found.</td></tr> :
+              {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading purchased materials...</td></tr> :
+                filteredMaterials.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No purchased materials found.</td></tr> :
                 filteredMaterials.map((material) => <tr key={material.id} className="transition-colors hover:bg-slate-50/80">
                   <td className="px-4 py-3.5 font-bold text-slate-900">{material.materialName}</td>
                   <td className="px-4 py-3.5">{material.supplier}</td>
-                  <td className="px-4 py-3.5">{material.conversionMode === 'packets' ? `${formatNumberDisplay(material.packetQuantity)} packets` : `${formatNumberDisplay(material.numberOfBags)} bags`}</td>
-                  <td className="px-4 py-3.5">{material.conversionMode === 'packets' ? `${formatNumberDisplay(material.unitsPerPacket)} pcs / packet` : `${formatNumberDisplay(material.weightPerBagKg)} kg`}</td>
+                  <td className="px-4 py-3.5">{material.conversionMode === 'piece_count'
+                    ? `${formatNumberDisplay(material.totalPieces)} pieces`
+                    : material.conversionMode === 'packets'
+                      ? `${formatNumberDisplay(material.packetQuantity)} packets`
+                      : `${formatNumberDisplay(material.numberOfBags)} bags`}</td>
+                  <td className="px-4 py-3.5">{material.conversionMode === 'piece_count'
+                    ? `${formatNumberDisplay(material.weightPerPieceGrams)} g / piece`
+                    : material.conversionMode === 'packets'
+                      ? `${formatNumberDisplay(material.packetWeightKg ?? (material.unitsPerPacket && material.weightPerPieceGrams ? material.unitsPerPacket * material.weightPerPieceGrams / 1000 : undefined))} kg / packet`
+                      : `${formatNumberDisplay(material.weightPerBagKg)} kg / bag`}</td>
                   <td className="px-4 py-3.5 font-bold text-blue-700">{formatNumberDisplay(material.totalWeightKg)} kg</td>
-                  <td className="px-4 py-3.5">{formatNumberDisplay(material.weightPerPieceGrams)} g</td>
-                  <td className="px-4 py-3.5 font-bold text-emerald-700">{formatNumberDisplay(material.totalPieces ?? material.equivalentPieces)} pcs</td>
+                  <td className="px-4 py-3.5 font-bold text-emerald-700">{material.totalPieces !== undefined || material.equivalentPieces !== undefined
+                    ? `${formatNumberDisplay(material.totalPieces ?? material.equivalentPieces)} pcs`
+                    : '—'}</td>
                   <td className="px-4 py-3.5"><div className="flex justify-end gap-1">
                     {can('purchasedMaterials', 'edit') && <button title="Edit purchased material" onClick={() => openForm(material)} className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-4 w-4" /></button>}
                     {can('purchasedMaterials', 'delete') && <button title="Delete purchased material" onClick={() => handleDelete(material)} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button>}
@@ -270,16 +252,10 @@ export const PurchasedMaterials: React.FC = () => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div><label className="form-label">Material Name</label><input required list="purchased-material-names" className="form-input" placeholder="Select or enter material name" value={form.materialName} onChange={(e) => updateForm('materialName', e.target.value)} /><datalist id="purchased-material-names">{savedMaterialNames.map((name) => <option key={name} value={name} />)}</datalist></div>
               <div><label className="form-label">Supplier</label><input required list="purchased-material-suppliers" className="form-input" placeholder="Select or enter supplier" value={form.supplier} onChange={(e) => updateForm('supplier', e.target.value)} /><datalist id="purchased-material-suppliers">{savedSuppliers.map((supplier) => <option key={supplier} value={supplier} />)}</datalist></div>
-              <div><label className="form-label">Conversion</label><select className="form-select" value={form.conversionMode} onChange={(e) => setForm((current) => ({ ...current, conversionMode: e.target.value as MaterialForm['conversionMode'] }))}><option value="pieces">Pieces (bag weight)</option><option value="packets">Packets</option></select></div>
-              {form.conversionMode === 'packets' ? <>
-                <div><label className="form-label">Packet Quantity</label><input required min="0.0001" step="any" type="number" className="form-input" value={form.packetQuantity} onChange={(e) => updateForm('packetQuantity', e.target.value)} /></div>
-                <div><label className="form-label">Units per Packet</label><input required min="1" step="1" type="number" className="form-input" value={form.unitsPerPacket} onChange={(e) => updateForm('unitsPerPacket', e.target.value)} /></div>
-              </> : <>
-                <div><label className="form-label">Bag Quantity</label><input required min="0.0001" step="any" type="number" className="form-input" value={form.numberOfBags} onChange={(e) => updateForm('numberOfBags', e.target.value)} /></div>
-                <div><label className="form-label">Weight per Bag (kg)</label><input required min="0.0001" step="any" type="number" className="form-input" value={form.weightPerBagKg} onChange={(e) => updateForm('weightPerBagKg', e.target.value)} /></div>
-              </>}
-              <div><label className="form-label">Weight per Piece (g)</label><input required min="0.0001" step="any" type="number" className="form-input" value={form.weightPerPieceGrams} onChange={(e) => updateForm('weightPerPieceGrams', e.target.value)} /></div>
-              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[11px] font-bold uppercase text-slate-400">Calculated Total Weight</div><div className="mt-1 text-lg font-bold text-blue-700">{formatNumberDisplay(totalWeightKg)} kg</div><div className="text-[11px] text-slate-500">Total pieces: {formatNumberDisplay(totalPieces)} · Equivalent pieces: {formatNumberDisplay(equivalentPieces)}</div></div>
+              <div><label className="form-label">Conversion</label><select className="form-select" value={form.conversionMode} onChange={(e) => setForm((current) => ({ ...current, conversionMode: e.target.value as MaterialForm['conversionMode'] }))}><option value="bags">Bags</option><option value="piece_count">Pieces</option><option value="packets">Packets</option></select></div>
+              <div><label className="form-label">{form.conversionMode === 'bags' ? 'Bag Quantity' : form.conversionMode === 'piece_count' ? 'Piece Quantity' : 'Packet Quantity'}</label><input required min={form.conversionMode === 'piece_count' ? '1' : '0.0001'} step={form.conversionMode === 'piece_count' ? '1' : 'any'} type="number" className="form-input" value={form.quantity} onChange={(e) => updateForm('quantity', e.target.value)} /></div>
+              <div><label className="form-label">{form.conversionMode === 'bags' ? 'Weight per Bag (kg)' : form.conversionMode === 'piece_count' ? 'Weight per Piece (g)' : 'Weight per Packet (kg)'}</label><input required min="0.0001" step="any" type="number" className="form-input" value={form.unitWeight} onChange={(e) => updateForm('unitWeight', e.target.value)} /></div>
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[11px] font-bold uppercase text-slate-400">Calculated Total Weight</div><div className="mt-1 text-lg font-bold text-blue-700">{formatNumberDisplay(totals.totalWeightKg)} kg</div>{totals.totalPieces !== undefined && <div className="text-[11px] text-slate-500">Total pieces: {formatNumberDisplay(totals.totalPieces)}</div>}</div>
             </div>
             <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={closeForm} className="btn-secondary">Cancel</button><button disabled={saving} type="submit" className="btn-primary">{saving ? 'Saving...' : 'Save Material'}</button></div>
           </form>

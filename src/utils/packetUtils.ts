@@ -104,6 +104,13 @@ export function getProductUnitsPerPacket(product?: Pick<Product, 'unitsPerPacket
     : Number(product.unitsPerPacket);
 }
 
+export function getOrderItemUnitsPerPacket(
+  orderItem?: Pick<OrderItem, 'unitsPerPacket'> | null,
+  product?: Pick<Product, 'unitsPerPacket'> | null
+): number | undefined {
+  return getProductUnitsPerPacket(orderItem) ?? getProductUnitsPerPacket(product);
+}
+
 export function calculatePacketUnits(packetCount: number, unitsPerPacket: number): number {
   if (!packetCount || !unitsPerPacket) return 0;
   const total = packetCount * unitsPerPacket;

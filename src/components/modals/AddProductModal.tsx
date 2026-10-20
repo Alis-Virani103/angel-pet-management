@@ -461,46 +461,46 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="form-label">COMBO PRICE — A</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">₹</span>
+                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="Combo Price A"
                     value={comboPriceA}
                     onChange={(e) => setComboPriceA(e.target.value)}
-                    className="form-input bg-white pl-7"
+                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
               </div>
               <div>
                 <label className="form-label">COMBO PRICE — B</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">₹</span>
+                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="Combo Price B"
                     value={comboPriceB}
                     onChange={(e) => setComboPriceB(e.target.value)}
-                    className="form-input bg-white pl-7"
+                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
               </div>
               <div>
                 <label className="form-label">COMBO PRICE — C</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">₹</span>
+                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="Combo Price C"
                     value={comboPriceC}
                     onChange={(e) => setComboPriceC(e.target.value)}
-                    className="form-input bg-white pl-7"
+                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
               </div>

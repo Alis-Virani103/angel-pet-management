@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
-import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus } from '../../types';
-import { getRawMaterials, addRawMaterial, addPurchase } from '../../services/db';
+import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus, Supplier } from '../../types';
+import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers } from '../../services/db';
 import { toBaseQuantity, formatQuantityWithUnit } from '../../utils/unitConversion';
 import { ShoppingBag, Plus, AlertCircle, CheckCircle2, Search, ChevronDown, Check } from 'lucide-react';
 
@@ -157,20 +157,140 @@ const SearchableMaterialSelect: React.FC<SearchableMaterialSelectProps> = ({
   );
 };
 
+interface SearchableSupplierSelectProps {
+  value: string;
+  suppliers: Supplier[];
+  onChange: (supplierId: string) => void;
+}
+
+const supplierDisplayName = (supplier: Supplier): string => supplier.company?.trim() || supplier.name;
+
+const SearchableSupplierSelect: React.FC<SearchableSupplierSelectProps> = ({ value, suppliers, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  const query = searchQuery.trim().toLowerCase();
+  const filteredSuppliers = suppliers.filter((supplier) =>
+    [supplier.company || '', supplier.name, supplier.phone || '']
+      .some((valueToSearch) => valueToSearch.toLowerCase().includes(query))
+  );
+
+  const handleSelect = (supplierId: string) => {
+    onChange(supplierId);
+    setIsOpen(false);
+    setSearchQuery('');
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className="w-full min-w-0 px-3 py-2.5 bg-white text-xs text-left rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between gap-2"
+      >
+        {selectedSupplier ? (
+          <span className="min-w-0 truncate font-semibold text-slate-800">
+            {supplierDisplayName(selectedSupplier)}
+            {selectedSupplier.company && selectedSupplier.name !== selectedSupplier.company && (
+              <span className="font-normal text-slate-500"> · {selectedSupplier.name}</span>
+            )}
+          </span>
+        ) : (
+          <span className="text-slate-400">Select a saved supplier</span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-2 animate-in fade-in duration-100">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              aria-label="Search saved suppliers"
+              role="combobox"
+              aria-expanded="true"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search company, contact, or phone..."
+              className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 rounded-lg border border-slate-200 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+          <div role="listbox" aria-label="Saved suppliers" className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+            {filteredSuppliers.length === 0 ? (
+              <div className="p-3 text-center text-slate-400 text-xs font-medium">
+                No saved suppliers match{query ? ` "${searchQuery}"` : ''}.
+              </div>
+            ) : filteredSuppliers.map((supplier) => {
+              const isSelected = supplier.id === value;
+              return (
+                <button
+                  key={supplier.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => handleSelect(supplier.id)}
+                  className={`w-full text-left px-2.5 py-2 hover:bg-blue-50/80 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                    isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-800'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium text-slate-900">{supplierDisplayName(supplier)}</span>
+                    {supplier.company && supplier.name !== supplier.company && (
+                      <span className="block truncate text-[10px] text-slate-500">Contact: {supplier.name}</span>
+                    )}
+                  </span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   isOpen,
   onClose,
   onPurchaseCreated
 }) => {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const [supplierLoadError, setSupplierLoadError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const submissionInProgress = useRef(false);
 
   // Form state
   const [items, setItems] = useState<DraftPurchaseItem[]>([createDraftItem()]);
-  const [supplierName, setSupplierName] = useState('');
-  const [supplierPhone, setSupplierPhone] = useState('');
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [status, setStatus] = useState<PurchaseStatus>('received');
   const [includeGst, setIncludeGst] = useState(true);
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
@@ -193,18 +313,33 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       loadMaterials();
     } else {
       setItems([createDraftItem()]);
+      setSelectedSupplierId('');
       setError('');
     }
   }, [isOpen]);
 
   const loadMaterials = async () => {
-    try {
-      const matList = await getRawMaterials();
-      setMaterials(matList);
-    } catch (e) {
-      console.error('Error loading raw materials:', e);
+    setSuppliersLoading(true);
+    setSupplierLoadError('');
+    setSuppliers([]);
+    setSelectedSupplierId('');
+    const [materialsResult, suppliersResult] = await Promise.allSettled([getRawMaterials(), getSuppliers()]);
+    if (materialsResult.status === 'fulfilled') {
+      setMaterials(materialsResult.value);
+    } else {
+      console.error('Error loading raw materials:', materialsResult.reason);
     }
+    if (suppliersResult.status === 'fulfilled') {
+      setSuppliers(suppliersResult.value);
+    } else {
+      console.error('Error loading saved suppliers:', suppliersResult.reason);
+      setSupplierLoadError('Could not load saved suppliers. Check supplier-view access and try again.');
+    }
+    setSuppliersLoading(false);
   };
+
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === selectedSupplierId);
+  const selectedSupplierName = selectedSupplier ? supplierDisplayName(selectedSupplier) : '';
 
   const isItemComplete = (item: DraftPurchaseItem): boolean => {
     if (!item.rawMaterialId) return false;
@@ -264,7 +399,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       unit: material?.purchaseUnit || material?.unit || '',
       unitCost: material ? String(material.unitCost) : ''
     });
-    if (material?.supplier && !supplierName) setSupplierName(material.supplier);
+    if (material?.supplier && !selectedSupplier) {
+      const materialSupplier = material.supplier.trim().toLowerCase();
+      const matchingSupplier = suppliers.find((supplier) =>
+        supplierDisplayName(supplier).trim().toLowerCase() === materialSupplier ||
+        supplier.name.trim().toLowerCase() === materialSupplier
+      );
+      if (matchingSupplier) setSelectedSupplierId(matchingSupplier.id);
+    }
   };
 
   const validPurchaseItems = items
@@ -312,6 +454,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       setError('Please enter the name and code for the new raw material.');
       return;
     }
+    if (!selectedSupplier) {
+      setError(suppliers.length === 0
+        ? 'No saved suppliers are available. Add a supplier before recording a purchase.'
+        : 'Select a supplier from the saved supplier records.');
+      return;
+    }
 
     const completedPurchaseItems = nonBlankItems.map((item): PurchaseItem => {
       const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
@@ -347,7 +495,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           conversionFactor: newMaterialConversionFactor,
           piecesPerBaseUnit: newMaterialPiecesPerBaseUnit || undefined,
           unitCost: Number(completedPurchaseItems[0]?.unitCost) || 0,
-          supplier: supplierName.trim()
+          supplier: selectedSupplierName
         });
         setItems((currentItems) => currentItems.map((item, index) => index === 0 ? { ...item, rawMaterialId: createdMaterial.id } : item));
         completedPurchaseItems[0] = {
@@ -360,8 +508,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       }
 
       await addPurchase({
-        supplierName: supplierName.trim(),
-        supplierPhone: supplierPhone.trim(),
+        supplierId: selectedSupplier.id,
+        supplierName: selectedSupplierName,
+        supplierPhone: selectedSupplier.phone || '',
         items: completedPurchaseItems,
         subtotal,
         gstRate: includeGst ? 18 : 0,
@@ -402,19 +551,21 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
 
         <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 space-y-2">
           <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">Supplier Company Name</label>
-          <input
-            type="text"
-            required
-            list="purchase-suppliers"
-            value={supplierName}
-            onChange={(e) => setSupplierName(e.target.value)}
-            className="w-full px-3 py-2.5 bg-white text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
-          />
-          <datalist id="purchase-suppliers">
-            {Array.from(new Set(materials.map((material) => material.supplier).filter(Boolean))).map((supplier) => (
-              <option key={supplier} value={supplier} />
-            ))}
-          </datalist>
+          {suppliersLoading ? (
+            <div className="w-full px-3 py-2.5 bg-white text-xs text-slate-500 rounded-xl border border-slate-200">Loading saved suppliers...</div>
+          ) : supplierLoadError ? (
+            <div className="rounded-xl border border-rose-200 bg-white p-3 text-xs text-rose-700">{supplierLoadError}</div>
+          ) : suppliers.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-white p-3 text-xs text-amber-800">
+              No suppliers are saved yet. Add a supplier in Supplier Management before recording a purchase.
+            </div>
+          ) : (
+            <SearchableSupplierSelect
+              value={selectedSupplierId}
+              suppliers={suppliers}
+              onChange={setSelectedSupplierId}
+            />
+          )}
           <p className="text-[11px] text-blue-700">This supplier will apply to every material item in this purchase bill.</p>
         </div>
 
@@ -451,6 +602,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quantity</label>
                     <input
                       type="text"
+                      aria-label={`Quantity for purchase item ${index + 1}`}
                       inputMode="decimal"
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, { quantity: e.target.value.replace(/[^\d.]/g, '') })}
@@ -500,6 +652,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate / Unit Cost</label>
                     <input
                       type="text"
+                      aria-label={`Rate for purchase item ${index + 1}`}
                       inputMode="decimal"
                       value={item.unitCost}
                       onChange={(e) => updateItem(item.id, { unitCost: e.target.value.replace(/[^\d.]/g, '') })}
@@ -647,6 +800,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Entry Delivery Status</label>
             <select
+              aria-label="Entry Delivery Status"
               value={status}
               onChange={(e) => setStatus(e.target.value as PurchaseStatus)}
               className="w-full px-3 py-2.5 bg-white text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"

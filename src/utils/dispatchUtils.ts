@@ -1,4 +1,22 @@
-import { Order, Dispatch } from '../types';
+import { Order, Dispatch, OrderItem, Product } from '../types';
+import { calculatePiecesFromPackets, getOrderItemUnitsPerPacket } from './packetUtils';
+
+export function getDispatchUnitsPerPacket(
+  orderItem?: Pick<OrderItem, 'unitsPerPacket'> | null,
+  product?: Pick<Product, 'unitsPerPacket'> | null
+): number | undefined {
+  return getOrderItemUnitsPerPacket(orderItem, product);
+}
+
+export function calculateDispatchPieces(
+  quantity: number,
+  unit: 'pieces' | 'packets',
+  unitsPerPacket?: number,
+  loosePieces = 0
+): number {
+  if (unit !== 'packets' || !unitsPerPacket) return quantity;
+  return calculatePiecesFromPackets(quantity, unitsPerPacket) + loosePieces;
+}
 
 export interface ProductDeliveryProgress {
   productId: string;

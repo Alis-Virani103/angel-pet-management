@@ -1271,18 +1271,23 @@ export async function updatePurchasedMaterial(
   const existing = list.find((item) => item.id === id);
   if (!existing) throw new Error('Purchased material not found');
   const updated: PurchasedMaterial = { ...existing, ...updates, updatedAt: new Date().toISOString() };
-  if (updates.conversionMode === 'pieces') {
-    delete updated.packetQuantity;
-    delete updated.unitsPerPacket;
-  }
+  const fieldsToClear: Array<keyof PurchasedMaterial> = updates.conversionMode === 'bags'
+    ? ['packetQuantity', 'packetWeightKg', 'unitsPerPacket', 'totalPieces', 'weightPerPieceGrams', 'equivalentPieces']
+    : updates.conversionMode === 'piece_count'
+      ? ['packetQuantity', 'packetWeightKg', 'unitsPerPacket', 'numberOfBags', 'weightPerBagKg']
+      : updates.conversionMode === 'packets'
+        ? ['unitsPerPacket', 'numberOfBags', 'weightPerBagKg', 'totalPieces', 'weightPerPieceGrams', 'equivalentPieces']
+        : [];
+  fieldsToClear.forEach((field) => {
+    delete updated[field];
+  });
   setLocalItem(STORAGE_KEYS.PURCHASED_MATERIALS, list.map((item) => item.id === id ? updated : item));
 
   if (shouldSyncToFirebase()) {
     const firebaseUpdates: Record<string, unknown> = sanitizeForFirestore(updated);
-    if (updates.conversionMode === 'pieces') {
-      firebaseUpdates.packetQuantity = deleteField();
-      firebaseUpdates.unitsPerPacket = deleteField();
-    }
+    fieldsToClear.forEach((field) => {
+      firebaseUpdates[field] = deleteField();
+    });
     await persistCloudWrite(setDoc(doc(getDb(), 'purchasedMaterials', id), firebaseUpdates, { merge: true }), 'Updating purchased material');
   }
   return updated;
