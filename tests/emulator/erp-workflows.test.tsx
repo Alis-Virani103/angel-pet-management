@@ -9,7 +9,7 @@ import { ref, uploadBytes } from 'firebase/storage';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-import { addCustomer, addFinishedGoodsLog, addOrder, addPayment, addDispatch, addPurchase, addSupplier, getCustomers, getOrders, getPayments, getRawMaterials, getPurchases, getProducts, getSuppliers, recordPurchasePayment, recordRawMaterialUsage, savePaymentReminder, updateCustomer, updateDispatchStatus, updatePurchaseStatus, updateSupplier } from '../../src/services/db';
+import { addCustomer, addFinishedGoodsLog, addOrder, addPayment, addDispatch, addProduct, addPurchase, addSupplier, getCustomers, getOrders, getPayments, getRawMaterials, getPurchases, getProducts, getSuppliers, recordPurchasePayment, recordRawMaterialUsage, savePaymentReminder, updateCustomer, updateDispatchStatus, updateProduct, updatePurchaseStatus, updateSupplier } from '../../src/services/db';
 import {
   auth as configuredAuth,
   db as configuredDb,
@@ -20,8 +20,10 @@ import {
 import { LanguageProvider } from '../../src/i18n';
 import { AuthProvider } from '../../src/auth/AuthContext';
 import { Finance } from '../../src/pages/Finance';
+import { AddProductModal } from '../../src/components/modals/AddProductModal';
+import { NewOrderModal } from '../../src/components/modals/NewOrderModal';
 import { NewPurchaseModal } from '../../src/components/modals/NewPurchaseModal';
-import { calculatePacketUnits, canProductUseFractionalPackets } from '../../src/utils/packetUtils';
+import { calculatePacketUnits, canProductUseFractionalPackets, getProductUnitsPerPacket } from '../../src/utils/packetUtils';
 import { calculateDispatchPieces, getDispatchUnitsPerPacket } from '../../src/utils/dispatchUtils';
 import { calculatePurchasedMaterialTotals } from '../../src/utils/purchasedMaterialUtils';
 import { calculateNetProductionQuantity } from '../../src/utils/productionUtils';
@@ -462,6 +464,54 @@ describe('isolated Firebase emulator workflows', () => {
     expect((await getOrders()).find((item) => item.id === order.id)?.orderStatus).toBe('completed');
   });
 
+  it('uses packet-plus-loose piece totals for order quantities and deducts dispatch stock once', async () => {
+    const customerId = `QA-CUS-PACKET-DISPATCH-${testSuffix}`;
+    const productId = `QA-PRODUCT-PACKET-DISPATCH-${testSuffix}`;
+    const orderQuantity = calculatePacketUnits(2, 500) + 7;
+    const order = await makeOrder(customerId, {
+      items: [{
+        productId,
+        productName: 'Synthetic packet bottle',
+        productType: 'bottle',
+        priceCategory: 'A',
+        unitPrice: 10,
+        quantity: orderQuantity,
+        subtotal: orderQuantity * 10,
+        soldByPacket: true,
+        packetCount: 2,
+        loosePieces: 7,
+        unitsPerPacket: 500
+      }],
+      subtotal: orderQuantity * 10,
+      totalAmount: orderQuantity * 10,
+      totalQuantity: orderQuantity
+    });
+    await adminDb.doc(`products/${productId}`).set(product(productId, 1500));
+
+    const dispatch = await addDispatch({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      items: [{
+        productId,
+        productName: 'Synthetic packet bottle',
+        quantity: orderQuantity,
+        deliveryUnit: 'packets',
+        packetQuantity: 2,
+        loosePieces: 7,
+        unitsPerPacket: 500
+      }],
+      dispatchDate: '2026-10-19',
+      status: 'dispatched'
+    });
+
+    expect(order.items[0].quantity).toBe(1007);
+    expect(dispatch.items[0].quantity).toBe(1007);
+    expect((await getDoc(doc(db, 'products', productId))).data()?.currentStock).toBe(493);
+    await updateDispatchStatus(dispatch.id, 'dispatched');
+    expect((await getDoc(doc(db, 'products', productId))).data()?.currentStock).toBe(493);
+  });
+
   it('uses packet-unit conversion for fractional packets, loose pieces, and pricing', () => {
     const quantity = calculatePacketUnits(2.5, 500) + 7;
     const unitPrice = 10;
@@ -484,6 +534,145 @@ describe('isolated Firebase emulator workflows', () => {
     expect(calculateDispatchPieces(2, 'packets', 500, 7)).toBe(1007);
     expect(calculateDispatchPieces(0, 'packets', 500, 7)).toBe(7);
     expect(calculateDispatchPieces(12, 'pieces', 500, 7)).toBe(12);
+    expect(getProductUnitsPerPacket({ unitsPerPacket: '240' as unknown as number })).toBe(240);
+    expect(getProductUnitsPerPacket({})).toBeUndefined();
+  });
+
+  it('saves packet sizes for supported product types and preserves configured or missing values on unrelated edits', async () => {
+    const packetSizes = { bottle: 360, cap: 240, inner: 120 } as const;
+    const savedProducts = await Promise.all(
+      (Object.keys(packetSizes) as Array<keyof typeof packetSizes>).map((type) =>
+        addProduct({
+          name: `Synthetic ${type} packet product`,
+          sku: `QA-${type.toUpperCase()}-${testSuffix}`,
+          type,
+          sizeOrType: 'QA',
+          priceA: 1,
+          priceB: 1,
+          priceC: 1,
+          currentStock: 100,
+          minimumStock: 0,
+          unit: 'pcs',
+          unitsPerPacket: packetSizes[type],
+          status: 'active'
+        })
+      )
+    );
+
+    for (const savedProduct of savedProducts) {
+      expect((await getDoc(doc(db, 'products', savedProduct.id))).data()?.unitsPerPacket)
+        .toBe(packetSizes[savedProduct.type]);
+      const updatedProduct = await updateProduct(savedProduct.id, { priceA: 2 });
+      expect(updatedProduct.unitsPerPacket).toBe(packetSizes[savedProduct.type]);
+      expect((await getDoc(doc(db, 'products', savedProduct.id))).data()?.unitsPerPacket)
+        .toBe(packetSizes[savedProduct.type]);
+    }
+
+    const unconfiguredProduct = await addProduct({
+      name: 'Synthetic unconfigured closure',
+      sku: `QA-CLOSURE-${testSuffix}`,
+      type: 'cap',
+      sizeOrType: 'QA',
+      priceA: 1,
+      priceB: 1,
+      priceC: 1,
+      currentStock: 100,
+      minimumStock: 0,
+      unit: 'pcs',
+      status: 'active'
+    });
+    await updateProduct(unconfiguredProduct.id, { priceA: 2 });
+    expect((await getDoc(doc(db, 'products', unconfiguredProduct.id))).data())
+      .not.toHaveProperty('unitsPerPacket');
+  });
+
+  it('adds and edits packet configuration through the product form', async () => {
+    const user = userEvent.setup();
+    const renderProductModal = (initialProduct?: Product) => render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <AuthProvider>
+            <AddProductModal
+              isOpen
+              onClose={() => undefined}
+              defaultType="cap"
+              initialProduct={initialProduct}
+            />
+          </AuthProvider>
+        </LanguageProvider>
+      </MemoryRouter>
+    );
+    const getInput = (label: string) => {
+      const input = screen.getByText(label, { exact: true }).parentElement?.querySelector('input');
+      if (!input) throw new Error(`Could not find input for ${label}.`);
+      return input;
+    };
+
+    renderProductModal();
+    await user.type(getInput('Product Name'), 'Synthetic form packet cap');
+    await user.type(getInput('Units per Packet (Optional)'), '240');
+    await user.type(getInput('Price A (Standard ₹)'), '1');
+    await user.type(getInput('Price B (Wholesale ₹)'), '1');
+    await user.type(getInput('Price C (Special ₹)'), '1');
+    await user.click(screen.getByRole('button', { name: 'Add Product' }));
+
+    let savedProduct: Product | undefined;
+    await waitFor(async () => {
+      savedProduct = (await getProducts()).find((item) => item.name === 'Synthetic form packet cap');
+      expect(savedProduct?.unitsPerPacket).toBe(240);
+    });
+    cleanup();
+
+    if (!savedProduct) throw new Error('Product form did not save its packet configuration.');
+    renderProductModal(savedProduct);
+    expect(getInput('Units per Packet (Optional)')).toHaveProperty('value', '240');
+    await user.clear(getInput('Price A (Standard ₹)'));
+    await user.type(getInput('Price A (Standard ₹)'), '2');
+    await user.click(screen.getByRole('button', { name: 'Update Product' }));
+
+    await waitFor(async () => {
+      expect((await getDoc(doc(db, 'products', savedProduct!.id))).data()?.unitsPerPacket).toBe(240);
+    });
+  });
+
+  it('shows Packet mode after product selection and disables it only when packet size is missing', async () => {
+    const configuredProductId = `QA-PRODUCT-ORDER-PACKET-${testSuffix}`;
+    const unconfiguredProductId = `QA-PRODUCT-ORDER-PIECES-${testSuffix}`;
+    await adminDb.doc(`products/${configuredProductId}`).set({
+      ...product(configuredProductId, 1000),
+      name: 'Synthetic configured packet bottle'
+    });
+    const unconfiguredProduct = {
+      ...product(unconfiguredProductId, 1000),
+      name: 'Synthetic unconfigured packet cap',
+      type: 'cap' as const
+    };
+    delete unconfiguredProduct.unitsPerPacket;
+    await adminDb.doc(`products/${unconfiguredProductId}`).set(unconfiguredProduct);
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <LanguageProvider>
+          <AuthProvider>
+            <NewOrderModal isOpen onClose={() => undefined} />
+          </AuthProvider>
+        </LanguageProvider>
+      </MemoryRouter>
+    );
+
+    const productSearch = await screen.findByRole('combobox', { name: 'Search product 1' });
+    await user.type(productSearch, 'Synthetic configured packet bottle');
+    await user.click(await screen.findByRole('option', { name: /Synthetic configured packet bottle/ }));
+    const configuredPacketButton = screen.getByRole('button', { name: 'Packet' });
+    expect(configuredPacketButton.hasAttribute('disabled')).toBe(false);
+
+    await user.click(screen.getByTitle('Clear product selection'));
+    await user.type(productSearch, 'Synthetic unconfigured packet cap');
+    await user.click(await screen.findByRole('option', { name: /Synthetic unconfigured packet cap/ }));
+    const unconfiguredPacketButton = screen.getByRole('button', { name: 'Packet' });
+    expect(unconfiguredPacketButton.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Pieces' })).toBeTruthy();
   });
 
   it('calculates purchased material weight for bags, pieces, and packets', () => {

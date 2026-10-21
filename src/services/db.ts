@@ -506,7 +506,7 @@ export async function addProduct(data: Omit<Product, 'id' | 'createdAt'>): Promi
   setLocalItem(STORAGE_KEYS.PRODUCTS, [newProduct, ...list]);
 
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'products', newProduct.id), newProduct), 'Adding product');
+    await persistCloudWrite(setDoc(doc(getDb(), 'products', newProduct.id), sanitizeForFirestore(newProduct)), 'Adding product');
   }
 
   return newProduct;

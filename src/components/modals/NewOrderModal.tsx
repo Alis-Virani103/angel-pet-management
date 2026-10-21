@@ -1277,6 +1277,26 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                         </div>
                       ) : (
                         <div>
+                          {product && (
+                            <div className="inline-flex w-full p-0.5 mb-1.5 bg-slate-200/80 rounded-lg text-[10px] font-bold">
+                              <button
+                                type="button"
+                                onClick={() => handleModeChange(item.id, false)}
+                                className="flex-1 py-1 px-1.5 rounded-md text-center bg-white text-slate-900 shadow-xs"
+                                title={t('Enter quantity in pieces')}
+                              >
+                                {t('Pieces')}
+                              </button>
+                              <button
+                                type="button"
+                                disabled
+                                className="flex-1 py-1 px-1.5 rounded-md text-center text-slate-400 cursor-not-allowed"
+                                title={t('Packet selling is only available when the product has a valid Units per Packet value.')}
+                              >
+                                {t('Packet')}
+                              </button>
+                            </div>
+                          )}
                           <div className="relative">
                             <input
                               type="text"

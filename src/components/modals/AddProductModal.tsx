@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Product, ProductType, ProductStatus } from '../../types';
 import { addProduct, updateProduct, getProducts } from '../../services/db';
+import { getProductUnitsPerPacket } from '../../utils/packetUtils';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { Package, AlertCircle, UploadCloud, Image as ImageIcon } from 'lucide-react';
 
@@ -63,11 +64,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setCurrentStock(initialProduct.currentStock || 0);
         setMinimumStock(initialProduct.minimumStock || 0);
         setUnit(initialProduct.unit || 'pcs');
-        setUnitsPerPacket(
-          typeof initialProduct.unitsPerPacket === 'number' && initialProduct.unitsPerPacket > 0
-            ? String(initialProduct.unitsPerPacket)
-            : ''
-        );
+        const savedUnitsPerPacket = getProductUnitsPerPacket(initialProduct);
+        setUnitsPerPacket(savedUnitsPerPacket ? String(savedUnitsPerPacket) : '');
         setAllowFractionalPackets(initialProduct.allowFractionalPackets !== false);
         setCompatibleCapId(initialProduct.compatibleCapId || '');
         setCompatibleInnerId(initialProduct.compatibleInnerId || '');
@@ -208,8 +206,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           currentStock: Number(currentStock),
           minimumStock: Number(minimumStock),
           unit,
-          unitsPerPacket: parsedUnitsPerPacket,
-          allowFractionalPackets: parsedUnitsPerPacket ? allowFractionalPackets : undefined,
+          ...(parsedUnitsPerPacket !== undefined
+            ? { unitsPerPacket: parsedUnitsPerPacket, allowFractionalPackets }
+            : {}),
           ...(type === 'bottle'
             ? {
                 compatibleCapId: compatibleCapId || undefined,
