@@ -19,7 +19,7 @@ export function isValidProductPrice(price: unknown): price is number {
  * Returns null if product is not defined or the price is invalid/missing.
  */
 export function getProductPriceForCategory(
-  product: Pick<Product, 'priceA' | 'priceB' | 'priceC'> | null | undefined,
+  product: Pick<Product, 'priceA' | 'priceB' | 'priceC' | 'priceD'> | null | undefined,
   category: PriceCategory
 ): number | null {
   if (!product) return null;
@@ -31,6 +31,8 @@ export function getProductPriceForCategory(
     rawPrice = product.priceB;
   } else if (category === 'C') {
     rawPrice = product.priceC;
+  } else if (category === 'D') {
+    rawPrice = product.priceD;
   }
 
   if (isValidProductPrice(rawPrice)) {
@@ -45,7 +47,7 @@ export function getProductPriceForCategory(
  * Returns null if not configured or invalid.
  */
 export function getBottleComboPrice(
-  product: Pick<Product, 'comboPriceA' | 'comboPriceB' | 'comboPriceC'> | null | undefined,
+  product: Pick<Product, 'comboPriceA' | 'comboPriceB' | 'comboPriceC' | 'comboPriceD'> | null | undefined,
   category: PriceCategory
 ): number | null {
   if (!product) return null;
@@ -57,6 +59,8 @@ export function getBottleComboPrice(
     rawPrice = product.comboPriceB;
   } else if (category === 'C') {
     rawPrice = product.comboPriceC;
+  } else if (category === 'D') {
+    rawPrice = product.comboPriceD;
   }
 
   if (isValidProductPrice(rawPrice)) {
@@ -125,11 +129,15 @@ export function calculateEffectiveItemRate(params: {
 /**
  * Returns formatted price string with ₹ symbol and 2 decimal places.
  */
-export function formatPrice(price: number | null | undefined, placeholder = '-'): string {
-  if (price === null || price === undefined || !Number.isFinite(price)) {
+export function formatPrice(price: number | string | null | undefined, placeholder = '-'): string {
+  if (price === null || price === undefined || price === '') {
     return placeholder;
   }
-  return `₹${price.toFixed(2)}`;
+  const num = typeof price === 'number' ? price : Number(price);
+  if (!Number.isFinite(num)) {
+    return placeholder;
+  }
+  return `₹${num.toFixed(2)}`;
 }
 
 /**
@@ -143,6 +151,8 @@ export function getPriceCategoryLabel(category: PriceCategory): string {
       return 'Category B (Wholesale)';
     case 'C':
       return 'Category C (Special)';
+    case 'D':
+      return 'Category D (Manual / Custom)';
     default:
       return `Category ${category}`;
   }

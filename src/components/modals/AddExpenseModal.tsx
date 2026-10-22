@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { Expense, PaymentMethod } from '../../types';
 import { addExpense } from '../../services/db';
+import { cleanDecimalInput } from '../../utils/packetUtils';
 import { IndianRupee, AlertCircle } from 'lucide-react';
 
 interface AddExpenseModalProps {
@@ -16,7 +17,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   onExpenseAdded
 }) => {
   const [category, setCategory] = useState<Expense['category']>('raw_materials');
-  const [amount, setAmount] = useState<number>(5000);
+  const [amount, setAmount] = useState<string>('5000');
   const [description, setDescription] = useState('');
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer');
@@ -26,7 +27,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (amount <= 0 || !description.trim()) {
+    const parsedAmount = Number(amount);
+    if (!parsedAmount || parsedAmount <= 0 || !description.trim()) {
       setError('Amount and description are required.');
       return;
     }
@@ -36,7 +38,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     try {
       await addExpense({
         category,
-        amount: Number(amount),
+        amount: parsedAmount,
         description: description.trim(),
         expenseDate,
         paymentMethod,
@@ -94,7 +96,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               step="0.01"
               required
               value={amount}
-              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setAmount(cleanDecimalInput(e.target.value))}
               className="form-input font-semibold"
             />
           </div>

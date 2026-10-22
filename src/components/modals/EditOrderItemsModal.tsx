@@ -29,6 +29,7 @@ interface DraftItem {
   initialUnitPrice?: number;
   selectedInnerId?: string;
   selectedCapId?: string;
+  manualRate?: number | string;
 }
 
 const createDraftItem = (item?: OrderItem, defaultCategory: PriceCategory = 'A'): DraftItem => {
@@ -46,13 +47,24 @@ const createDraftItem = (item?: OrderItem, defaultCategory: PriceCategory = 'A')
     initialPriceCategory: item?.priceCategory,
     initialUnitPrice: item ? item.unitPrice : undefined,
     selectedInnerId: item?.selectedInnerId || '',
-    selectedCapId: item?.selectedCapId || ''
+    selectedCapId: item?.selectedCapId || '',
+    manualRate: item?.priceCategory === 'D' && item?.unitPrice ? String(item.unitPrice) : ''
   };
 };
 
 function getItemUnitPrice(item: DraftItem, products: Product[]): number | null {
   const product = products.find((p) => p.id === item.productId);
   if (!product) return null;
+
+  if (item.priceCategory === 'D') {
+    if (item.manualRate !== undefined && item.manualRate !== '') {
+      const parsed = Number(item.manualRate);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    if (typeof item.initialUnitPrice === 'number' && item.initialUnitPrice > 0) {
+      return item.initialUnitPrice;
+    }
+  }
 
   // Preserve historical rate if product, category, and inner/cap selections are untouched
   const isUnchangedHistorical =
@@ -244,17 +256,21 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
       return;
     }
 
-    const invalidPriceItem = items.find((item) => {
-      const product = products.find((candidate) => candidate.id === item.productId);
-      if (!product) return true;
-      const unitPrice = getItemUnitPrice(item, products);
-      return !isValidProductPrice(unitPrice);
-    });
+    const isDeliveryChallan = order.paymentType === 'delivery_challan';
 
-    if (invalidPriceItem) {
-      const product = products.find((candidate) => candidate.id === invalidPriceItem.productId);
-      setError(`Product "${product?.name || 'Selected product'}" does not have a valid price for Category ${invalidPriceItem.priceCategory}. Please configure price before saving.`);
-      return;
+    if (!isDeliveryChallan) {
+      const invalidPriceItem = items.find((item) => {
+        const product = products.find((candidate) => candidate.id === item.productId);
+        if (!product) return true;
+        const unitPrice = getItemUnitPrice(item, products);
+        return !isValidProductPrice(unitPrice);
+      });
+
+      if (invalidPriceItem) {
+        const product = products.find((candidate) => candidate.id === invalidPriceItem.productId);
+        setError(`Product "${product?.name || 'Selected product'}" does not have a valid price for Category ${invalidPriceItem.priceCategory}. Please configure price before saving.`);
+        return;
+      }
     }
 
     const invalidQuantityItem = items.find((item) => {
@@ -390,6 +406,7 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
                       <option value="A">Category A</option>
                       <option value="B">Category B</option>
                       <option value="C">Category C</option>
+                      <option value="D">Category D (Manual)</option>
                     </select>
                   </div>
                   <div>
@@ -410,24 +427,63 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
                     )}
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rate (₹)</label>
-                    <div
-                      className={`px-3 py-2 text-xs font-bold rounded-xl border min-h-[36px] flex items-center justify-between ${
-                        !product
-                          ? 'bg-slate-100 text-slate-400 border-slate-200'
-                          : hasValidPrice
-                          ? 'bg-slate-100 text-slate-800 border-slate-200/80'
-                          : 'bg-rose-50 text-rose-600 border-rose-200'
-                      }`}
-                    >
-                      <span>{hasValidPrice ? `₹${calculatedUnitPrice.toFixed(2)}` : (product ? 'No Price' : '-')}</span>
-                    </div>
-                    <div className={`text-[9px] font-semibold mt-0.5 truncate ${hasValidPrice ? 'text-blue-600' : 'text-rose-600'}`}>
-                      {hasValidPrice
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Rate (₹) {item.priceCategory === 'D' ? '(Manual)' : ''}
+                    </label>
+                    {item.priceCategory === 'D' ? (
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          step="any"
+                          placeholder="0.00"
+                          aria-label={`Manual rate for product ${index + 1}`}
+                          value={item.manualRate === undefined || item.manualRate === null ? (calculatedUnitPrice ? String(calculatedUnitPrice) : '') : String(item.manualRate)}
+                          onChange={(e) => {
+                            const cleaned = cleanDecimalInput(e.target.value);
+                            updateItem(item.id, { manualRate: cleaned });
+                          }}
+                          className="w-full pl-6 pr-2.5 py-1.5 text-xs font-bold bg-white text-slate-800 rounded-xl border border-blue-400 min-h-[36px] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`px-3 py-2 text-xs font-bold rounded-xl border min-h-[36px] flex items-center justify-between ${
+                          !product
+                            ? 'bg-slate-100 text-slate-400 border-slate-200'
+                            : order.paymentType === 'delivery_challan' && !hasValidPrice
+                            ? 'bg-slate-100/60 text-slate-400 border-slate-200'
+                            : hasValidPrice
+                            ? 'bg-slate-100 text-slate-800 border-slate-200/80'
+                            : 'bg-rose-50 text-rose-600 border-rose-200'
+                        }`}
+                      >
+                        <span>
+                          {hasValidPrice
+                            ? `₹${calculatedUnitPrice.toFixed(2)}`
+                            : order.paymentType === 'delivery_challan'
+                            ? (product ? '— (Optional)' : '-')
+                            : (product ? 'No Price' : '-')}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`text-[9px] font-semibold mt-0.5 truncate ${
+                      item.priceCategory === 'D'
+                        ? (hasValidPrice ? 'text-indigo-600' : 'text-amber-600')
+                        : hasValidPrice 
+                        ? 'text-blue-600' 
+                        : order.paymentType === 'delivery_challan' 
+                        ? 'text-slate-500' 
+                        : 'text-rose-600'
+                    }`}>
+                      {item.priceCategory === 'D'
+                        ? (hasValidPrice ? 'Manual Rate (Category D)' : 'Enter rate manually')
+                        : hasValidPrice
                         ? (isBottle && innerProduct && capProduct && configuredComboPrice
                             ? `Combo (Cat ${item.priceCategory})`
                             : `Cat ${item.priceCategory}`)
-                        : (product ? `No Cat ${item.priceCategory} price` : '')}
+                        : (product ? (order.paymentType === 'delivery_challan' ? 'Rate optional for Delivery Challan' : `No Cat ${item.priceCategory} price`) : '')}
                     </div>
                   </div>
                   <button

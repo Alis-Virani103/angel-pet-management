@@ -171,6 +171,7 @@ export const SettingsPage: React.FC = () => {
                 <option value="A">{t('Category A (Standard)')}</option>
                 <option value="B">{t('Category B (Wholesale)')}</option>
                 <option value="C">{t('Category C (Special)')}</option>
+                <option value="D">{t('Category D (Manual / Custom)')}</option>
               </select>
             </div>
           </div>

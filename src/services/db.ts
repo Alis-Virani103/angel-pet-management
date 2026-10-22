@@ -5,8 +5,9 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc
-  , deleteField
+  deleteDoc,
+  deleteField,
+  runTransaction
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { auth, db, storage, isLiveFirebaseConfigured } from '../firebase/config';
@@ -613,7 +614,9 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
   }
 
   // Update Customer's total orders & total spent (AS Orders do not add to totalSpent)
-  const customers = await getCustomers();
+  const customers = shouldSyncToFirebase()
+    ? await getCustomers()
+    : getLocalItem<Customer[]>(STORAGE_KEYS.CUSTOMERS, initialCustomers);
   const targetCustomer = customers.find((c) => c.id === newOrder.customerId);
   if (targetCustomer) {
     const updatedTotalOrders = (targetCustomer.totalOrders || 0) + 1;
@@ -626,7 +629,10 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
 
   // If Cash Memo and not AS Order, automatically record full payment in Finance
   if (!isAS && isCashMemo && newOrder.totalAmount > 0) {
-    const existingPaymentIds = new Set((await getPayments()).map((payment) => payment.id));
+    const existingPayments = shouldSyncToFirebase()
+      ? await getPayments()
+      : getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+    const existingPaymentIds = new Set(existingPayments.map((payment) => payment.id));
     const receiptNumber = createUniqueId('REC', existingPaymentIds);
     const newPayment: Payment = {
       id: receiptNumber,
@@ -676,7 +682,11 @@ export async function updateOrder(id: string, updates: Partial<Order>): Promise<
   setLocalItem(STORAGE_KEYS.ORDERS, newList);
 
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'orders', id), sanitizeForFirestore(updated), { merge: true }), `Updating order ${id}`);
+    if (updateKeys.length > 0 && updateKeys.every((key) => key === 'paidAmount' || key === 'paymentStatus')) {
+      await persistCloudWrite(updateDoc(doc(getDb(), 'orders', id), sanitizeForFirestore(updates)), `Updating order payment ${id}`);
+    } else {
+      await persistCloudWrite(setDoc(doc(getDb(), 'orders', id), sanitizeForFirestore(updated), { merge: true }), `Updating order ${id}`);
+    }
   }
 
   return updated;
@@ -965,50 +975,198 @@ export async function getPayments(): Promise<Payment[]> {
   return items;
 }
 
-export async function addPayment(data: Omit<Payment, 'id' | 'receiptNumber'>): Promise<Payment> {
+export async function checkPaymentStatus(
+  paymentId: string,
+  orderId?: string
+): Promise<{
+  recorded: boolean;
+  payment?: Payment;
+  orderBalanceUpdated?: boolean;
+}> {
+  await requireAnyPermission([['finance', 'view'], ['finance', 'create']]);
+
+  if (!shouldSyncToFirebase()) {
+    const localPayments = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+    const existing = localPayments.find((p) => p.id === paymentId);
+    return { recorded: Boolean(existing), payment: existing, orderBalanceUpdated: true };
+  }
+
+  const paymentSnap = await withTimeout(getDoc(doc(getDb(), 'payments', paymentId)), 10000);
+  if (!paymentSnap.exists()) {
+    return { recorded: false };
+  }
+
+  const payment = { ...paymentSnap.data(), id: paymentSnap.id } as Payment;
+  const targetOrderId = orderId || payment.orderId;
+  let orderBalanceUpdated = true;
+
+  if (targetOrderId) {
+    const orderSnap = await withTimeout(getDoc(doc(getDb(), 'orders', targetOrderId)), 10000);
+    if (orderSnap.exists()) {
+      const order = orderSnap.data() as Order;
+      if ((order.paidAmount || 0) < payment.amount) {
+        orderBalanceUpdated = false;
+        const newPaid = (order.paidAmount || 0) + payment.amount;
+        const newStatus: Order['paymentStatus'] = newPaid >= order.totalAmount ? 'paid' : 'partially_paid';
+        await withTimeout(
+          updateDoc(doc(getDb(), 'orders', targetOrderId), {
+            paidAmount: newPaid,
+            paymentStatus: newStatus
+          }),
+          10000
+        );
+        orderBalanceUpdated = true;
+      }
+    }
+  }
+
+  const list = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+  if (!list.some((p) => p.id === payment.id)) {
+    setLocalItem(STORAGE_KEYS.PAYMENTS, [payment, ...list]);
+  }
+
+  return { recorded: true, payment, orderBalanceUpdated };
+}
+
+export async function addPayment(
+  data: Omit<Payment, 'id' | 'receiptNumber'> & { id?: string; receiptNumber?: string }
+): Promise<Payment> {
   await requirePermission('finance', 'create');
   if (!Number.isFinite(data.amount) || data.amount <= 0) {
     throw new Error('Payment amount must be greater than zero.');
   }
-  const orders = await getOrders();
-  const targetOrder = orders.find((o) => o.id === data.orderId || o.orderNumber === data.orderNumber);
-  if (!targetOrder) throw new Error('Sales order not found.');
-  if (targetOrder.orderType === 'AS') {
-    throw new Error('Payment not applicable for AS Order.');
-  }
-  if (targetOrder.orderStatus === 'cancelled') {
-    throw new Error('Cancelled orders cannot receive payments.');
-  }
-  if (targetOrder.paymentType === 'cash_memo') {
-    throw new Error('Cash Memo orders are already paid in full. Additional payments cannot be recorded.');
-  }
-  if (data.amount > Math.max(0, targetOrder.totalAmount - targetOrder.paidAmount)) {
-    throw new Error('Payment amount cannot exceed the outstanding balance.');
-  }
 
-  const existingPaymentIds = new Set((await getPayments()).map((payment) => payment.id));
-  const receiptNumber = createUniqueId('REC', existingPaymentIds);
+  const receiptNumber = data.receiptNumber || data.id || `REC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const paymentId = receiptNumber;
+
   const newPayment: Payment = {
     ...data,
-    id: receiptNumber,
+    id: paymentId,
     receiptNumber
   };
 
-  const list = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
-  setLocalItem(STORAGE_KEYS.PAYMENTS, [newPayment, ...list]);
+  if (!shouldSyncToFirebase()) {
+    const orders = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
+    const targetOrder = orders.find((o) => o.id === data.orderId || o.orderNumber === data.orderNumber);
+    if (!targetOrder) throw new Error('Sales order not found.');
+    if (targetOrder.orderType === 'AS') {
+      throw new Error('Payment not applicable for AS Order.');
+    }
+    if (targetOrder.orderStatus === 'cancelled') {
+      throw new Error('Cancelled orders cannot receive payments.');
+    }
+    if (targetOrder.paymentType === 'cash_memo') {
+      throw new Error('Cash Memo orders are already paid in full. Additional payments cannot be recorded.');
+    }
+    if (data.amount > Math.max(0, targetOrder.totalAmount - targetOrder.paidAmount)) {
+      throw new Error('Payment amount cannot exceed the outstanding balance.');
+    }
 
-  if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'payments', newPayment.id), newPayment), 'Adding payment');
+    const list = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+    const existing = list.find((p) => p.id === paymentId);
+    if (existing) {
+      return existing;
+    }
+    setLocalItem(STORAGE_KEYS.PAYMENTS, [newPayment, ...list]);
+
+    const newPaid = targetOrder.paidAmount + data.amount;
+    const newStatus: Order['paymentStatus'] = newPaid >= targetOrder.totalAmount ? 'paid' : 'partially_paid';
+    const updatedOrders = orders.map((o) =>
+      o.id === targetOrder.id ? { ...o, paidAmount: newPaid, paymentStatus: newStatus } : o
+    );
+    setLocalItem(STORAGE_KEYS.ORDERS, updatedOrders);
+
+    return newPayment;
   }
 
-  const newPaid = targetOrder.paidAmount + data.amount;
-  const newStatus: Order['paymentStatus'] = newPaid >= targetOrder.totalAmount ? 'paid' : 'partially_paid';
-  await updateOrder(targetOrder.id, {
-    paidAmount: newPaid,
-    paymentStatus: newStatus
-  });
+  // Firebase Cloud mode: ATOMIC TRANSACTION directly on target order and payment
+  const dbInstance = getDb();
+  let targetOrderId = data.orderId;
+  const paymentRef = doc(dbInstance, 'payments', paymentId);
 
-  return newPayment;
+  let finalPayment = newPayment;
+  let finalPaidAmount = 0;
+  let finalPaymentStatus: Order['paymentStatus'] = 'partially_paid';
+
+  await withTimeout(
+    runTransaction(dbInstance, async (transaction) => {
+      // 1. Point lookup for order directly by document ID (O(1), avoids full-collection scan timeout)
+      let orderRef = doc(dbInstance, 'orders', targetOrderId);
+      let orderSnap = await transaction.get(orderRef);
+
+      if (!orderSnap.exists() && data.orderNumber && data.orderNumber !== targetOrderId) {
+        orderRef = doc(dbInstance, 'orders', data.orderNumber);
+        orderSnap = await transaction.get(orderRef);
+        if (orderSnap.exists()) {
+          targetOrderId = data.orderNumber;
+        }
+      }
+
+      if (!orderSnap.exists()) {
+        throw new Error('Sales order not found.');
+      }
+
+      const targetOrder = { ...orderSnap.data(), id: orderSnap.id } as Order;
+      targetOrderId = targetOrder.id;
+
+      // 2. Check if this payment was already recorded (idempotency check)
+      const existingPaymentSnap = await transaction.get(paymentRef);
+      if (existingPaymentSnap.exists()) {
+        const existingData = { ...existingPaymentSnap.data(), id: existingPaymentSnap.id } as Payment;
+        finalPayment = existingData;
+        finalPaidAmount = targetOrder.paidAmount;
+        finalPaymentStatus = targetOrder.paymentStatus;
+        return;
+      }
+
+      // Validations
+      if (targetOrder.orderType === 'AS') {
+        throw new Error('Payment not applicable for AS Order.');
+      }
+      if (targetOrder.orderStatus === 'cancelled') {
+        throw new Error('Cancelled orders cannot receive payments.');
+      }
+      if (targetOrder.paymentType === 'cash_memo') {
+        throw new Error('Cash Memo orders are already paid in full. Additional payments cannot be recorded.');
+      }
+      const remainingBalance = Math.max(0, targetOrder.totalAmount - targetOrder.paidAmount);
+      if (data.amount > remainingBalance) {
+        throw new Error('Payment amount cannot exceed the outstanding balance.');
+      }
+
+      const newPaid = targetOrder.paidAmount + data.amount;
+      const newStatus: Order['paymentStatus'] = newPaid >= targetOrder.totalAmount ? 'paid' : 'partially_paid';
+
+      finalPaidAmount = newPaid;
+      finalPaymentStatus = newStatus;
+
+      // 3. ATOMIC WRITES: Both payment record and order balance update committed together
+      transaction.set(paymentRef, sanitizeForFirestore(newPayment));
+      transaction.update(orderRef, {
+        paidAmount: newPaid,
+        paymentStatus: newStatus
+      });
+    }),
+    10000
+  );
+
+  // Sync to local cache safely after successful transaction commit
+  const paymentList = getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+  if (!paymentList.some((p) => p.id === finalPayment.id)) {
+    setLocalItem(STORAGE_KEYS.PAYMENTS, [finalPayment, ...paymentList]);
+  }
+
+  const orderList = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
+  setLocalItem(
+    STORAGE_KEYS.ORDERS,
+    orderList.map((o) =>
+      o.id === targetOrderId
+        ? { ...o, paidAmount: finalPaidAmount, paymentStatus: finalPaymentStatus }
+        : o
+    )
+  );
+
+  return finalPayment;
 }
 
 // ================= PAYMENT REMINDERS =================

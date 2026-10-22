@@ -8,7 +8,7 @@ export default defineConfig({
         url: 'http://localhost'
       }
     },
-    include: ['tests/emulator/**/*.test.tsx'],
+    include: ['tests/emulator/**/*.test.tsx', 'tests/unit/**/*.test.ts'],
     fileParallelism: false,
     testTimeout: 20000,
     hookTimeout: 20000

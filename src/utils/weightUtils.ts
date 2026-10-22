@@ -7,31 +7,33 @@ export type WeightUnit = 'g' | 'kg';
  * Returns null if weight is invalid or not configured.
  */
 export function getWeightInGrams(
-  weightPerPiece?: number | null,
+  weightPerPiece?: number | string | null,
   unit: WeightUnit = 'g'
 ): number | null {
-  if (typeof weightPerPiece !== 'number' || !Number.isFinite(weightPerPiece) || weightPerPiece <= 0) {
+  const num = typeof weightPerPiece === 'string' ? Number(weightPerPiece) : weightPerPiece;
+  if (typeof num !== 'number' || !Number.isFinite(num) || num <= 0) {
     return null;
   }
-  return unit === 'kg' ? weightPerPiece * 1000 : weightPerPiece;
+  return unit === 'kg' ? num * 1000 : num;
 }
 
 /**
  * Formats a weight in grams into a clean, human-readable string (g or kg)
  * without unnecessary trailing zeros (e.g. "20 kg", "1.25 kg", "500 g").
  */
-export function formatWeight(grams: number | null | undefined): string {
-  if (typeof grams !== 'number' || !Number.isFinite(grams) || grams <= 0) {
+export function formatWeight(grams: number | string | null | undefined): string {
+  const num = typeof grams === 'string' ? Number(grams) : grams;
+  if (typeof num !== 'number' || !Number.isFinite(num) || num <= 0) {
     return '';
   }
 
-  if (grams >= 1000) {
-    const kg = grams / 1000;
+  if (num >= 1000) {
+    const kg = num / 1000;
     const formatted = kg % 1 === 0 ? kg.toFixed(0) : parseFloat(kg.toFixed(3)).toString();
     return `${formatted} kg`;
   }
 
-  const formatted = grams % 1 === 0 ? grams.toFixed(0) : parseFloat(grams.toFixed(2)).toString();
+  const formatted = num % 1 === 0 ? num.toFixed(0) : parseFloat(num.toFixed(2)).toString();
   return `${formatted} g`;
 }
 
@@ -39,13 +41,14 @@ export function formatWeight(grams: number | null | undefined): string {
  * Formats the per-piece weight for display in product cards and order rows (e.g. "10 g / piece").
  */
 export function formatPieceWeight(
-  weightPerPiece?: number | null,
+  weightPerPiece?: number | string | null,
   unit: WeightUnit = 'g'
 ): string {
-  if (typeof weightPerPiece !== 'number' || !Number.isFinite(weightPerPiece) || weightPerPiece <= 0) {
+  const num = typeof weightPerPiece === 'string' ? Number(weightPerPiece) : weightPerPiece;
+  if (typeof num !== 'number' || !Number.isFinite(num) || num <= 0) {
     return '';
   }
-  const cleanVal = weightPerPiece % 1 === 0 ? weightPerPiece.toString() : parseFloat(weightPerPiece.toFixed(3)).toString();
+  const cleanVal = num % 1 === 0 ? num.toString() : parseFloat(num.toFixed(3)).toString();
   return `${cleanVal} ${unit} / piece`;
 }
 

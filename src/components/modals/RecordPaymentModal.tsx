@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { Order, PaymentMethod } from '../../types';
-import { getOrders, addPayment } from '../../services/db';
-import { IndianRupee, AlertCircle } from 'lucide-react';
+import { getOrders, addPayment, checkPaymentStatus } from '../../services/db';
+import { cleanDecimalInput } from '../../utils/packetUtils';
+import { IndianRupee, AlertCircle, RefreshCw, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface RecordPaymentModalProps {
   isOpen: boolean;
@@ -19,16 +20,24 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState(defaultOrderId || '');
-  const [amount, setAmount] = useState<number>(0);
+  const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
+  const [isTimedOut, setIsTimedOut] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const submissionInProgress = useRef(false);
+  const activeReceiptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      setError('');
+      setIsTimedOut(false);
+      setSuccessMessage('');
+      activeReceiptIdRef.current = null;
       loadOrders();
     }
   }, [isOpen]);
@@ -45,7 +54,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
         if (fullOrder && fullOrder.orderType === 'AS') {
           setError('Payment not applicable for AS Order.');
           setSelectedOrderId('');
-          setAmount(0);
+          setAmount('');
           return;
         }
       }
@@ -57,7 +66,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       if (target) {
         setSelectedOrderId(target.id);
         const pendingAmount = Math.max(0, target.totalAmount - target.paidAmount);
-        setAmount(pendingAmount);
+        setAmount(pendingAmount > 0 ? String(pendingAmount) : '');
       } else if (eligibleOrders.length > 0) {
         setSelectedOrderId(eligibleOrders[0].id);
       }
@@ -71,15 +80,81 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
 
   const handleOrderChange = (orderId: string) => {
     setSelectedOrderId(orderId);
+    activeReceiptIdRef.current = null;
+    setIsTimedOut(false);
+    setError('');
+    setSuccessMessage('');
     const ord = orders.find((o) => o.id === orderId);
     if (ord) {
-      setAmount(Math.max(0, ord.totalAmount - ord.paidAmount));
+      const pending = Math.max(0, ord.totalAmount - ord.paidAmount);
+      setAmount(pending > 0 ? String(pending) : '');
+    }
+  };
+
+  const handleVerifyAndRetry = async () => {
+    if (verifying || loading || !selectedOrder || !activeReceiptIdRef.current) return;
+
+    setVerifying(true);
+    setError('');
+    const receiptId = activeReceiptIdRef.current;
+
+    try {
+      // 1. Check whether original operation actually succeeded on server
+      const check = await checkPaymentStatus(receiptId, selectedOrder.id);
+      if (check.recorded) {
+        setIsTimedOut(false);
+        setSuccessMessage(
+          `Payment of ₹${check.payment?.amount || amount} was already confirmed on the server (Receipt: ${receiptId}). Balance is up to date.`
+        );
+        activeReceiptIdRef.current = null;
+        setTimeout(() => {
+          if (onPaymentRecorded) onPaymentRecorded();
+          onClose();
+        }, 1200);
+        return;
+      }
+
+      // 2. Not recorded: safe to retry with the same receipt ID
+      const parsedAmount = Number(amount);
+      await addPayment({
+        id: receiptId,
+        receiptNumber: receiptId,
+        orderId: selectedOrder.id,
+        orderNumber: selectedOrder.orderNumber,
+        customerId: selectedOrder.customerId,
+        customerName: selectedOrder.companyName || selectedOrder.customerName,
+        amount: parsedAmount,
+        paymentMethod,
+        paymentDate,
+        notes: notes.trim()
+      });
+
+      activeReceiptIdRef.current = null;
+      setIsTimedOut(false);
+      if (onPaymentRecorded) onPaymentRecorded();
+      onClose();
+    } catch (err) {
+      console.error('Verify & retry error:', err);
+      const isTimeoutError = err instanceof Error && (
+        err.message.includes('timed out') ||
+        err.message.includes('Firestore operation timed out') ||
+        err.message.includes('timeout')
+      );
+      if (isTimeoutError) {
+        setIsTimedOut(true);
+        setError('Operation timed out again. Click "Verify & Retry" to check if the server processed it.');
+      } else {
+        setIsTimedOut(false);
+        setError(err instanceof Error ? err.message : 'Failed to record payment.');
+      }
+    } finally {
+      setVerifying(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submissionInProgress.current) return;
+    if (submissionInProgress.current || loading || verifying) return;
     if (!selectedOrder) {
       setError('Please select an eligible order.');
       return;
@@ -88,31 +163,59 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       setError('Payment not applicable for AS Order.');
       return;
     }
-    if (amount <= 0) {
+    const parsedAmount = Number(amount);
+    if (!parsedAmount || parsedAmount <= 0) {
       setError('Please enter a payment amount greater than 0.');
       return;
     }
 
+    if (isTimedOut && activeReceiptIdRef.current) {
+      await handleVerifyAndRetry();
+      return;
+    }
+
+    const receiptNumber = `REC-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    activeReceiptIdRef.current = receiptNumber;
+
     submissionInProgress.current = true;
     setLoading(true);
     setError('');
+    setIsTimedOut(false);
+    setSuccessMessage('');
+
     try {
       await addPayment({
+        id: receiptNumber,
+        receiptNumber,
         orderId: selectedOrder.id,
         orderNumber: selectedOrder.orderNumber,
         customerId: selectedOrder.customerId,
         customerName: selectedOrder.companyName || selectedOrder.customerName,
-        amount: Number(amount),
+        amount: parsedAmount,
         paymentMethod,
         paymentDate,
         notes: notes.trim()
       });
 
+      activeReceiptIdRef.current = null;
       if (onPaymentRecorded) onPaymentRecorded();
       onClose();
     } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to record payment.');
+      console.error('Payment submission failed:', err);
+      const isTimeoutError = err instanceof Error && (
+        err.message.includes('timed out') ||
+        err.message.includes('Firestore operation timed out') ||
+        err.message.includes('timeout')
+      );
+
+      if (isTimeoutError) {
+        setIsTimedOut(true);
+        setError('Firestore operation timed out while waiting for server confirmation. The payment might have already succeeded. Click "Verify & Retry" to check server status before retrying.');
+      } else {
+        activeReceiptIdRef.current = null;
+        setIsTimedOut(false);
+        setError(err instanceof Error ? err.message : 'Failed to record payment.');
+      }
     } finally {
       submissionInProgress.current = false;
       setLoading(false);
@@ -128,10 +231,32 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {successMessage && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
         {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl space-y-2.5">
+            <div className="flex items-start gap-2 font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+            {isTimedOut && (
+              <div className="pt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleVerifyAndRetry}
+                  disabled={verifying}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  <span>{verifying ? 'Checking Server Status...' : 'Verify Server & Safe Retry'}</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -179,7 +304,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               required
               max={pendingBalance > 0 ? pendingBalance : undefined}
               value={amount}
-              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                setAmount(cleanDecimalInput(e.target.value));
+                activeReceiptIdRef.current = null;
+                setIsTimedOut(false);
+                setError('');
+              }}
               className="form-input font-semibold"
             />
           </div>
@@ -188,7 +318,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             <label className="form-label">Payment Method</label>
             <select
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              onChange={(e) => {
+                setPaymentMethod(e.target.value as PaymentMethod);
+                activeReceiptIdRef.current = null;
+                setIsTimedOut(false);
+                setError('');
+              }}
               className="form-select"
             >
               <option value="bank_transfer">Bank Transfer (NEFT/RTGS)</option>
@@ -206,7 +341,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               type="date"
               required
               value={paymentDate}
-              onChange={(e) => setPaymentDate(e.target.value)}
+              onChange={(e) => {
+                setPaymentDate(e.target.value);
+                activeReceiptIdRef.current = null;
+                setIsTimedOut(false);
+                setError('');
+              }}
               className="form-input"
             />
           </div>
@@ -216,7 +356,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             <input
               type="text"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                activeReceiptIdRef.current = null;
+                setIsTimedOut(false);
+                setError('');
+              }}
               className="form-input"
             />
           </div>
@@ -232,11 +377,30 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || verifying}
             className="btn-primary !bg-emerald-600 hover:!bg-emerald-700"
           >
-            <IndianRupee className="w-4 h-4" />
-            <span>{loading ? 'Recording...' : 'Record Payment'}</span>
+            {verifying ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Checking Server...</span>
+              </>
+            ) : loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Recording...</span>
+              </>
+            ) : isTimedOut ? (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                <span>Verify & Retry</span>
+              </>
+            ) : (
+              <>
+                <IndianRupee className="w-4 h-4" />
+                <span>Record Payment</span>
+              </>
+            )}
           </button>
         </div>
       </form>

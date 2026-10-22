@@ -66,26 +66,36 @@ export function cleanDecimalInput(value: string): string {
   
   // Allow only digits and one decimal point
   const cleaned = value.replace(/[^0-9.]/g, '');
+  if (!cleaned) return '';
   
   // Ensure at most one decimal point
   const parts = cleaned.split('.');
-  if (parts.length > 2) {
-    return parts[0] + '.' + parts.slice(1).join('');
-  }
+  const hasDecimal = parts.length > 1;
+  const rawIntegerPart = parts.shift() || '';
+  const integerPart = rawIntegerPart.replace(/^0+/, '');
+  const decimalPart = parts.join('');
+  if (hasDecimal && !integerPart && !decimalPart) return rawIntegerPart ? '0.' : '.';
   
-  return cleaned;
+  return `${integerPart || '0'}${hasDecimal ? `.${decimalPart}` : ''}`;
+}
+
+export function cleanIntegerInput(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  return digits.replace(/^0+(?=\d)/, '');
 }
 
 /**
  * Formats a number cleanly using Indian locale ('en-IN') without trailing zeros,
  * preserving decimals up to maxDecimals.
  */
-export function formatNumberDisplay(value: number | undefined | null, maxDecimals: number = 4): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
-  if (Number.isInteger(value)) {
-    return value.toLocaleString('en-IN');
+export function formatNumberDisplay(value: number | string | undefined | null, maxDecimals: number = 4): string {
+  if (value === undefined || value === null || value === '') return '0';
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return '0';
+  if (Number.isInteger(num)) {
+    return num.toLocaleString('en-IN');
   }
-  return value.toLocaleString('en-IN', { maximumFractionDigits: maxDecimals });
+  return num.toLocaleString('en-IN', { maximumFractionDigits: maxDecimals });
 }
 
 /**

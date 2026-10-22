@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory } from '../../types';
 import { addRawMaterial, updateRawMaterial } from '../../services/db';
+import { cleanDecimalInput } from '../../utils/packetUtils';
 import { Layers, AlertCircle } from 'lucide-react';
 
 interface AddRawMaterialModalProps {
@@ -20,15 +21,15 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [category, setCategory] = useState<RawMaterialCategory>('granules');
-  const [currentStock, setCurrentStock] = useState<number>(1000);
-  const [minimumStock, setMinimumStock] = useState<number>(500);
+  const [currentStock, setCurrentStock] = useState<number | string>(1000);
+  const [minimumStock, setMinimumStock] = useState<number | string>(500);
   const [unit, setUnit] = useState('kg');
   const [baseUnit, setBaseUnit] = useState('kg');
   const [purchaseUnit, setPurchaseUnit] = useState('kg');
   const [consumptionUnit, setConsumptionUnit] = useState('kg');
-  const [conversionFactor, setConversionFactor] = useState<number>(1);
-  const [piecesPerBaseUnit, setPiecesPerBaseUnit] = useState<number>(0);
-  const [unitCost, setUnitCost] = useState<number>(120);
+  const [conversionFactor, setConversionFactor] = useState<number | string>(1);
+  const [piecesPerBaseUnit, setPiecesPerBaseUnit] = useState<number | string>('');
+  const [unitCost, setUnitCost] = useState<number | string>(120);
   const [supplier, setSupplier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,29 +40,29 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
         setName(initialMaterial.name || '');
         setCode(initialMaterial.code || '');
         setCategory(initialMaterial.category || 'granules');
-        setCurrentStock(initialMaterial.currentStock || 0);
-        setMinimumStock(initialMaterial.minimumStock || 0);
+        setCurrentStock(initialMaterial.currentStock !== undefined && initialMaterial.currentStock !== null ? cleanDecimalInput(String(initialMaterial.currentStock)) : '0');
+        setMinimumStock(initialMaterial.minimumStock !== undefined && initialMaterial.minimumStock !== null ? cleanDecimalInput(String(initialMaterial.minimumStock)) : '0');
         setUnit(initialMaterial.unit || 'kg');
         setBaseUnit(initialMaterial.baseUnit || initialMaterial.unit || 'kg');
         setPurchaseUnit(initialMaterial.purchaseUnit || initialMaterial.unit || 'kg');
         setConsumptionUnit(initialMaterial.consumptionUnit || initialMaterial.unit || 'kg');
-        setConversionFactor(initialMaterial.conversionFactor || 1);
-        setPiecesPerBaseUnit(initialMaterial.piecesPerBaseUnit || 0);
-        setUnitCost(initialMaterial.unitCost || 0);
+        setConversionFactor(initialMaterial.conversionFactor !== undefined && initialMaterial.conversionFactor !== null ? cleanDecimalInput(String(initialMaterial.conversionFactor)) : '1');
+        setPiecesPerBaseUnit(initialMaterial.piecesPerBaseUnit !== undefined && initialMaterial.piecesPerBaseUnit !== null ? cleanDecimalInput(String(initialMaterial.piecesPerBaseUnit)) : '');
+        setUnitCost(initialMaterial.unitCost !== undefined && initialMaterial.unitCost !== null ? cleanDecimalInput(String(initialMaterial.unitCost)) : '0');
         setSupplier(initialMaterial.supplier || '');
       } else {
         setName('');
         setCode('');
         setCategory('granules');
-        setCurrentStock(1000);
-        setMinimumStock(500);
+        setCurrentStock('1000');
+        setMinimumStock('500');
         setUnit('kg');
         setBaseUnit('kg');
         setPurchaseUnit('kg');
         setConsumptionUnit('kg');
-        setConversionFactor(1);
-        setPiecesPerBaseUnit(0);
-        setUnitCost(120);
+        setConversionFactor('1');
+        setPiecesPerBaseUnit('');
+        setUnitCost('120');
         setSupplier('');
       }
       setError('');
@@ -194,7 +195,7 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
               type="number"
               required
               value={currentStock}
-              onChange={(e) => setCurrentStock(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setCurrentStock(cleanDecimalInput(e.target.value))}
               className="form-input"
             />
           </div>
@@ -205,7 +206,7 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
               type="number"
               required
               value={minimumStock}
-              onChange={(e) => setMinimumStock(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setMinimumStock(cleanDecimalInput(e.target.value))}
               className="form-input"
             />
           </div>
@@ -268,7 +269,7 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
                 min="0.01"
                 required
                 value={conversionFactor}
-                onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
+                onChange={(e) => setConversionFactor(cleanDecimalInput(e.target.value))}
                 className="form-input"
               />
               <p className="text-[10px] text-slate-400 mt-1">
@@ -286,11 +287,11 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
                 step="0.01"
                 min="0"
                 value={piecesPerBaseUnit}
-                onChange={(e) => setPiecesPerBaseUnit(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setPiecesPerBaseUnit(cleanDecimalInput(e.target.value))}
                 className="form-input"
               />
               <p className="text-[10px] text-slate-400 mt-1">
-                {piecesPerBaseUnit > 0 ? `1 ${baseUnit} = ${piecesPerBaseUnit} pcs` : 'No pieces conversion'}
+                {Number(piecesPerBaseUnit) > 0 ? `1 ${baseUnit} = ${piecesPerBaseUnit} pcs` : 'No pieces conversion'}
               </p>
             </div>
             <div className="flex items-end">
@@ -309,7 +310,7 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
               step="0.01"
               required
               value={unitCost}
-              onChange={(e) => setUnitCost(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setUnitCost(cleanDecimalInput(e.target.value))}
               className="form-input font-semibold"
             />
           </div>

@@ -258,6 +258,7 @@ export function generateInvoiceHtml(
   products?: Product[] | null
 ): string {
   const isGst = isPakkaBill(order);
+  const isChallan = order.paymentType === 'delivery_challan';
   const pendingBalance = Math.max(0, order.totalAmount - order.paidAmount);
 
   const companyName = settings?.companyName || '';
@@ -316,6 +317,9 @@ export function generateInvoiceHtml(
         ? `<div style="font-size: 8.5px; color: #2563eb; font-weight: 600; margin-top: 2px;">Packaging: ${formatPackagingMode(item.packagingMode)}</div>`
         : '';
 
+      const rateDisplay = isComponent ? '-' : (isChallan && unitPrice <= 0 ? '—' : `₹${unitPrice.toFixed(2)}`);
+      const subtotalDisplay = isComponent ? '-' : (isChallan && subtotal <= 0 ? '—' : `₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
       return `
         <tr style="border-bottom: 1px solid #f1f5f9;">
           <td style="padding: 6px 8px; color: #64748b; font-size: 9.5px; vertical-align: middle;">${idx + 1}</td>
@@ -326,11 +330,11 @@ export function generateInvoiceHtml(
           </td>
           <td style="padding: 6px 8px; text-align: center; color: #475569; font-size: 9.5px; text-transform: capitalize; vertical-align: middle;">${item.productType}</td>
           <td style="padding: 6px 8px; text-align: center; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${qtyDisplay}</td>
-          <td style="padding: 6px 8px; text-align: right; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${isComponent ? '-' : `₹${unitPrice.toFixed(2)}`}</td>
+          <td style="padding: 6px 8px; text-align: right; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${rateDisplay}</td>
           ${hasAnyWeightInOrder ? `
             <td style="padding: 6px 8px; text-align: center; color: #475569; font-size: 9.5px; vertical-align: middle;">${weightDisplay || '-'}</td>
           ` : ''}
-          <td style="padding: 6px 8px; text-align: right; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${isComponent ? '-' : `₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
+          <td style="padding: 6px 8px; text-align: right; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${subtotalDisplay}</td>
         </tr>
       `;
     })
@@ -338,8 +342,8 @@ export function generateInvoiceHtml(
 
   const isAS = order.orderType === 'AS';
   const isCashMemo = order.paymentType === 'cash_memo';
-  const memoLabel = isAS ? 'AS ORDER' : isCashMemo ? 'CASH MEMO' : 'DEBIT MEMO';
-  const titleText = isAS ? 'NON-COMMERCIAL ORDER' : isGst ? 'TAX INVOICE' : 'KACHHA BILL';
+  const memoLabel = isAS ? 'AS ORDER' : isCashMemo ? 'CASH MEMO' : isChallan ? 'DELIVERY CHALLAN' : 'DEBIT MEMO';
+  const titleText = isAS ? 'NON-COMMERCIAL ORDER' : isChallan ? 'DELIVERY CHALLAN' : isGst ? 'TAX INVOICE' : 'KACHHA BILL';
 
   return `<!DOCTYPE html>
 <html lang="en">

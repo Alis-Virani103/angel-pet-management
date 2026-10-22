@@ -1,4 +1,4 @@
-export type PriceCategory = 'A' | 'B' | 'C';
+export type PriceCategory = 'A' | 'B' | 'C' | 'D';
 export type CustomerType = 'Distributor' | 'Manufacturer' | 'Wholesaler' | 'Retailer' | 'Direct Customer';
 export type CustomerStatus = 'active' | 'inactive';
 
@@ -88,6 +88,7 @@ export interface Product {
   priceA: number;
   priceB: number;
   priceC: number;
+  priceD?: number;
   currentStock: number;
   minimumStock: number;
   unit: string; // 'pcs', 'units', etc.
@@ -108,6 +109,7 @@ export interface Product {
   comboPriceA?: number; // Final per-bottle combo price for Category A (Bottle + Inner + Cap)
   comboPriceB?: number; // Final per-bottle combo price for Category B (Bottle + Inner + Cap)
   comboPriceC?: number; // Final per-bottle combo price for Category C (Bottle + Inner + Cap)
+  comboPriceD?: number; // Final per-bottle combo price for Category D
   // Physical Weight configuration
   weightPerPiece?: number; // Weight per individual piece/unit (e.g. 10)
   weightUnit?: 'g' | 'kg'; // 'g' (grams) or 'kg' (kilograms), defaults to 'g'

@@ -201,6 +201,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
               <option value="A">Category A (Standard Rate)</option>
               <option value="B">Category B (Wholesale Rate)</option>
               <option value="C">Category C (Special Rate)</option>
+              <option value="D">Category D (Manual / Custom Rate)</option>
             </select>
           </div>
 

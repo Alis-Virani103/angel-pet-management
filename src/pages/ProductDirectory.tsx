@@ -390,13 +390,13 @@ export const ProductDirectory: React.FC<ProductDirectoryProps> = ({ onOpenAddPro
                           ₹{p.priceA.toFixed(2)}
                         </span>
                       </div>
-                      {typeof p.weightPerPiece === 'number' && p.weightPerPiece > 0 && (
+                      {Boolean(formatPieceWeight(p.weightPerPiece ?? (p as any).weight, p.weightUnit)) && (
                         <div className="pl-3 border-l border-slate-200">
                           <span className="text-[10px] text-slate-400 font-medium block uppercase tracking-wider">
                             Weight
                           </span>
                           <span className="text-xs font-bold text-slate-700">
-                            {formatPieceWeight(p.weightPerPiece, p.weightUnit)}
+                            {formatPieceWeight(p.weightPerPiece ?? (p as any).weight, p.weightUnit)}
                           </span>
                         </div>
                       )}

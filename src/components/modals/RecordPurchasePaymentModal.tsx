@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { PurchaseOrder } from '../../types';
 import { getPurchases, recordPurchasePayment } from '../../services/db';
+import { cleanDecimalInput } from '../../utils/packetUtils';
 import { IndianRupee, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface RecordPurchasePaymentModalProps {
@@ -19,7 +20,7 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
 }) => {
   const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string>('');
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -47,9 +48,9 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
       const targetPurchase = unpaid.find((p) => p.id === targetId);
       if (targetPurchase) {
         const remaining = targetPurchase.totalAmount - targetPurchase.paidAmount;
-        setPaymentAmount(Math.max(0, remaining));
+        setPaymentAmount(remaining > 0 ? String(remaining) : '');
       } else {
-        setPaymentAmount(0);
+        setPaymentAmount('');
       }
     } catch (e) {
       console.error('Error loading purchases for payment:', e);
@@ -61,7 +62,7 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
     const target = purchases.find((p) => p.id === id);
     if (target) {
       const remaining = target.totalAmount - target.paidAmount;
-      setPaymentAmount(Math.max(0, remaining));
+      setPaymentAmount(remaining > 0 ? String(remaining) : '');
     }
   };
 
@@ -80,12 +81,13 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
       return;
     }
 
-    if (paymentAmount <= 0) {
+    const parsedPaymentAmount = Number(paymentAmount);
+    if (!parsedPaymentAmount || parsedPaymentAmount <= 0) {
       setError('Please enter a payment amount greater than 0.');
       return;
     }
 
-    if (paymentAmount > remainingBalance) {
+    if (parsedPaymentAmount > remainingBalance) {
       setError(`Payment amount cannot exceed the remaining balance of ₹${remainingBalance.toLocaleString('en-IN')}`);
       return;
     }
@@ -98,7 +100,7 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
     submissionInProgress.current = true;
     setLoading(true);
     try {
-      await recordPurchasePayment(selectedPurchaseId, paymentAmount, paymentDate, notes.trim());
+      await recordPurchasePayment(selectedPurchaseId, parsedPaymentAmount, paymentDate, notes.trim());
       if (onPaymentRecorded) onPaymentRecorded();
       onClose();
     } catch (err) {
@@ -178,8 +180,8 @@ export const RecordPurchasePaymentModal: React.FC<RecordPurchasePaymentModalProp
               max={remainingBalance}
               step={1}
               required
-              value={paymentAmount || ''}
-              onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(cleanDecimalInput(e.target.value))}
               className="form-input font-bold"
             />
           </div>

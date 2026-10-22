@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Product, ProductType, ProductStatus } from '../../types';
 import { addProduct, updateProduct, getProducts } from '../../services/db';
-import { getProductUnitsPerPacket } from '../../utils/packetUtils';
+import { cleanDecimalInput, cleanIntegerInput, getProductUnitsPerPacket } from '../../utils/packetUtils';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { Package, AlertCircle, UploadCloud, Image as ImageIcon } from 'lucide-react';
 
@@ -30,17 +30,17 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [priceA, setPriceA] = useState('');
   const [priceB, setPriceB] = useState('');
   const [priceC, setPriceC] = useState('');
-  const [currentStock, setCurrentStock] = useState<number>(1000);
-  const [minimumStock, setMinimumStock] = useState<number>(500);
+  const [currentStock, setCurrentStock] = useState('1000');
+  const [minimumStock, setMinimumStock] = useState('500');
   const [unit, setUnit] = useState('pcs');
   const [unitsPerPacket, setUnitsPerPacket] = useState('');
   const [allowFractionalPackets, setAllowFractionalPackets] = useState(true);
   const [compatibleCapId, setCompatibleCapId] = useState('');
   const [compatibleInnerId, setCompatibleInnerId] = useState('');
-  const [comboPriceA, setComboPriceA] = useState<string | number>('');
-  const [comboPriceB, setComboPriceB] = useState<string | number>('');
-  const [comboPriceC, setComboPriceC] = useState<string | number>('');
-  const [weightPerPiece, setWeightPerPiece] = useState<string | number>('');
+  const [comboPriceA, setComboPriceA] = useState('');
+  const [comboPriceB, setComboPriceB] = useState('');
+  const [comboPriceC, setComboPriceC] = useState('');
+  const [weightPerPiece, setWeightPerPiece] = useState('');
   const [weightUnit, setWeightUnit] = useState<'g' | 'kg'>('g');
   const [status, setStatus] = useState<ProductStatus>('active');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -58,38 +58,35 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setType(initialProduct.type || defaultType);
         setSizeOrType(initialProduct.sizeOrType || '');
         setDescription(initialProduct.description || '');
-        setPriceA(String(initialProduct.priceA ?? ''));
-        setPriceB(String(initialProduct.priceB ?? ''));
-        setPriceC(String(initialProduct.priceC ?? ''));
-        setCurrentStock(initialProduct.currentStock || 0);
-        setMinimumStock(initialProduct.minimumStock || 0);
+        setPriceA(initialProduct.priceA !== undefined && initialProduct.priceA !== null ? cleanDecimalInput(String(initialProduct.priceA)) : '');
+        setPriceB(initialProduct.priceB !== undefined && initialProduct.priceB !== null ? cleanDecimalInput(String(initialProduct.priceB)) : '');
+        setPriceC(initialProduct.priceC !== undefined && initialProduct.priceC !== null ? cleanDecimalInput(String(initialProduct.priceC)) : '');
+        setCurrentStock(initialProduct.currentStock !== undefined && initialProduct.currentStock !== null ? cleanIntegerInput(String(initialProduct.currentStock)) : '0');
+        setMinimumStock(initialProduct.minimumStock !== undefined && initialProduct.minimumStock !== null ? cleanIntegerInput(String(initialProduct.minimumStock)) : '0');
         setUnit(initialProduct.unit || 'pcs');
         const savedUnitsPerPacket = getProductUnitsPerPacket(initialProduct);
         setUnitsPerPacket(savedUnitsPerPacket ? String(savedUnitsPerPacket) : '');
         setAllowFractionalPackets(initialProduct.allowFractionalPackets !== false);
         setCompatibleCapId(initialProduct.compatibleCapId || '');
         setCompatibleInnerId(initialProduct.compatibleInnerId || '');
-        setComboPriceA(
-          typeof initialProduct.comboPriceA === 'number' && initialProduct.comboPriceA > 0
-            ? initialProduct.comboPriceA
-            : ''
-        );
-        setComboPriceB(
-          typeof initialProduct.comboPriceB === 'number' && initialProduct.comboPriceB > 0
-            ? initialProduct.comboPriceB
-            : ''
-        );
-        setComboPriceC(
-          typeof initialProduct.comboPriceC === 'number' && initialProduct.comboPriceC > 0
-            ? initialProduct.comboPriceC
-            : ''
-        );
-        setWeightPerPiece(
-          typeof initialProduct.weightPerPiece === 'number' && initialProduct.weightPerPiece > 0
-            ? initialProduct.weightPerPiece
-            : ''
-        );
-        setWeightUnit(initialProduct.weightUnit === 'kg' ? 'kg' : 'g');
+        const rawComboA = initialProduct.comboPriceA as unknown;
+        const numComboA = rawComboA !== undefined && rawComboA !== null && rawComboA !== '' ? Number(rawComboA) : NaN;
+        setComboPriceA(!isNaN(numComboA) && numComboA > 0 ? (typeof rawComboA === 'number' ? rawComboA.toFixed(2) : cleanDecimalInput(String(rawComboA))) : '');
+        const rawComboB = initialProduct.comboPriceB as unknown;
+        const numComboB = rawComboB !== undefined && rawComboB !== null && rawComboB !== '' ? Number(rawComboB) : NaN;
+        setComboPriceB(!isNaN(numComboB) && numComboB > 0 ? (typeof rawComboB === 'number' ? rawComboB.toFixed(2) : cleanDecimalInput(String(rawComboB))) : '');
+        const rawComboC = initialProduct.comboPriceC as unknown;
+        const numComboC = rawComboC !== undefined && rawComboC !== null && rawComboC !== '' ? Number(rawComboC) : NaN;
+        setComboPriceC(!isNaN(numComboC) && numComboC > 0 ? (typeof rawComboC === 'number' ? rawComboC.toFixed(2) : cleanDecimalInput(String(rawComboC))) : '');
+        const rawWeight = initialProduct.weightPerPiece ??
+          (initialProduct as any).weight ??
+          (initialProduct as any).pieceWeight ??
+          (initialProduct as any).weightPerPieceGrams ??
+          (initialProduct as any).unitWeight;
+        const numWeight = rawWeight !== undefined && rawWeight !== null && rawWeight !== '' ? Number(rawWeight) : NaN;
+        setWeightPerPiece(!isNaN(numWeight) && numWeight > 0 ? cleanDecimalInput(String(rawWeight)) : '');
+        const rawUnit = initialProduct.weightUnit ?? (initialProduct as any).unitOfWeight;
+        setWeightUnit(rawUnit === 'kg' ? 'kg' : 'g');
         setStatus(initialProduct.status || 'active');
         setImagePreview(initialProduct.imageUrl || '');
       } else {
@@ -101,8 +98,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setPriceA('');
         setPriceB('');
         setPriceC('');
-        setCurrentStock(1000);
-        setMinimumStock(500);
+        setCurrentStock('1000');
+        setMinimumStock('500');
         setUnit('pcs');
         setUnitsPerPacket('');
         setAllowFractionalPackets(true);
@@ -140,9 +137,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     const parsedPriceA = Number(priceA);
     const parsedPriceB = Number(priceB);
     const parsedPriceC = Number(priceC);
+    const parsedCurrentStock = Number.parseInt(currentStock, 10);
+    const parsedMinimumStock = Number.parseInt(minimumStock, 10);
     if (
       [priceA, priceB, priceC].some((value) => value.trim() === '') ||
-      [parsedPriceA, parsedPriceB, parsedPriceC, currentStock, minimumStock].some((value) => !Number.isFinite(value) || value < 0)
+      [currentStock, minimumStock].some((value) => value.trim() === '') ||
+      [parsedPriceA, parsedPriceB, parsedPriceC, parsedCurrentStock, parsedMinimumStock].some((value) => !Number.isFinite(value) || value < 0)
     ) {
       setError('Prices and stock values must be valid non-negative numbers.');
       return;
@@ -203,8 +203,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           priceA: parsedPriceA,
           priceB: parsedPriceB,
           priceC: parsedPriceC,
-          currentStock: Number(currentStock),
-          minimumStock: Number(minimumStock),
+          currentStock: parsedCurrentStock,
+          minimumStock: parsedMinimumStock,
           unit,
           ...(parsedUnitsPerPacket !== undefined
             ? { unitsPerPacket: parsedUnitsPerPacket, allowFractionalPackets }
@@ -238,8 +238,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           priceA: parsedPriceA,
           priceB: parsedPriceB,
           priceC: parsedPriceC,
-          currentStock: Number(currentStock),
-          minimumStock: Number(minimumStock),
+          currentStock: parsedCurrentStock,
+          minimumStock: parsedMinimumStock,
           unit,
           ...(parsedUnitsPerPacket ? { unitsPerPacket: parsedUnitsPerPacket, allowFractionalPackets } : {}),
           ...(type === 'bottle'
@@ -381,7 +381,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="0.01"
                 required
                 value={priceA}
-                onChange={(e) => setPriceA(e.target.value)}
+                onChange={(e) => setPriceA(cleanDecimalInput(e.target.value))}
                 className="form-input bg-white"
               />
             </div>
@@ -392,7 +392,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="0.01"
                 required
                 value={priceB}
-                onChange={(e) => setPriceB(e.target.value)}
+                onChange={(e) => setPriceB(cleanDecimalInput(e.target.value))}
                 className="form-input bg-white"
               />
             </div>
@@ -403,7 +403,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="0.01"
                 required
                 value={priceC}
-                onChange={(e) => setPriceC(e.target.value)}
+                onChange={(e) => setPriceC(cleanDecimalInput(e.target.value))}
                 className="form-input bg-white"
               />
             </div>
@@ -470,7 +470,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     step="0.01"
                     placeholder="Combo Price A"
                     value={comboPriceA}
-                    onChange={(e) => setComboPriceA(e.target.value)}
+                    onChange={(e) => setComboPriceA(cleanDecimalInput(e.target.value))}
                     className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
@@ -484,7 +484,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     step="0.01"
                     placeholder="Combo Price B"
                     value={comboPriceB}
-                    onChange={(e) => setComboPriceB(e.target.value)}
+                    onChange={(e) => setComboPriceB(cleanDecimalInput(e.target.value))}
                     className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
@@ -498,7 +498,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     step="0.01"
                     placeholder="Combo Price C"
                     value={comboPriceC}
-                    onChange={(e) => setComboPriceC(e.target.value)}
+                    onChange={(e) => setComboPriceC(cleanDecimalInput(e.target.value))}
                     className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
                   />
                 </div>
@@ -514,7 +514,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <input
               type="number"
               value={currentStock}
-              onChange={(e) => setCurrentStock(parseInt(e.target.value) || 0)}
+              onChange={(e) => setCurrentStock(cleanIntegerInput(e.target.value))}
               className="form-input"
             />
           </div>
@@ -524,7 +524,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <input
               type="number"
               value={minimumStock}
-              onChange={(e) => setMinimumStock(parseInt(e.target.value) || 0)}
+              onChange={(e) => setMinimumStock(cleanIntegerInput(e.target.value))}
               className="form-input"
             />
           </div>
@@ -549,7 +549,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               inputMode="numeric"
               pattern="[0-9]*"
               value={unitsPerPacket}
-              onChange={(e) => setUnitsPerPacket(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setUnitsPerPacket(cleanIntegerInput(e.target.value))}
               className="form-input"
             />
             <p className="text-[11px] text-slate-400 mt-1">Leave empty if this product is not sold in packets.</p>
@@ -593,7 +593,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 min="0.0001"
                 placeholder="e.g. 10 or 0.01"
                 value={weightPerPiece}
-                onChange={(e) => setWeightPerPiece(e.target.value)}
+                onChange={(e) => setWeightPerPiece(cleanDecimalInput(e.target.value))}
                 className="form-input bg-white"
               />
             </div>

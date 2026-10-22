@@ -4,7 +4,7 @@ import { Customer, Product, OrderItem, PriceCategory, Order, Settings, PaymentDo
 import { getCustomers, getProducts, getOrders, getSettings, addOrder, addCustomer } from '../../services/db';
 import { ShoppingCart, Check, Plus, AlertCircle, Search, Trash2, Printer, Link2, Package, Layers, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from '../../i18n';
-import { calculatePacketUnits, getProductUnitsPerPacket, isPositiveInteger, parsePositiveInteger, parsePositiveNumber, calculatePacketsFromQuantity, formatPacketBreakdown, isPositiveNumber, cleanDecimalInput, formatNumberDisplay, canProductUseFractionalPackets } from '../../utils/packetUtils';
+import { calculatePacketUnits, getProductUnitsPerPacket, isPositiveInteger, parsePositiveInteger, parsePositiveNumber, calculatePacketsFromQuantity, formatPacketBreakdown, isPositiveNumber, cleanDecimalInput, cleanIntegerInput, formatNumberDisplay, canProductUseFractionalPackets } from '../../utils/packetUtils';
 import { getProductPriceForCategory, isValidProductPrice, getPreviousRatesForProduct, formatPreviousRates, calculateEffectiveItemRate, getBottleComboPrice } from '../../utils/pricingUtils';
 import { formatPackagingMode } from '../../utils/packagingUtils';
 import { printInvoice } from '../../utils/invoicePrintUtils';
@@ -26,6 +26,7 @@ interface DraftOrderItem {
   isCombo: boolean;
   selectedInnerId?: string; // id of selected inner product or ''
   selectedCapId?: string; // id of selected cap product or ''
+  manualRate?: number | string; // For Category D: manually entered product rate
 }
 
 const createDraftItem = (productId = '', id = `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`): DraftOrderItem => ({
@@ -37,7 +38,8 @@ const createDraftItem = (productId = '', id = `line-${Date.now()}-${Math.random(
   loosePieces: '',
   isCombo: false,
   selectedInnerId: '',
-  selectedCapId: ''
+  selectedCapId: '',
+  manualRate: ''
 });
 
 export const NewOrderModal: React.FC<NewOrderModalProps> = ({
@@ -180,15 +182,19 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     const product = products.find((p) => p.id === item.productId);
     if (!product) return false;
 
-    const { innerProduct, capProduct } = getComboComponents(item, product);
-
-    const autoRate = calculateEffectiveItemRate({
-      product,
-      category: priceCategory,
-      innerProduct,
-      capProduct
-    });
-    if (!isValidProductPrice(autoRate)) return false;
+    if (paymentType !== 'delivery_challan') {
+      const { innerProduct, capProduct } = getComboComponents(item, product);
+      const autoRate = calculateEffectiveItemRate({
+        product,
+        category: priceCategory,
+        innerProduct,
+        capProduct
+      });
+      const resolvedRate = priceCategory === 'D' && item.manualRate !== undefined && item.manualRate !== ''
+        ? Number(item.manualRate)
+        : autoRate;
+      if (!isValidProductPrice(resolvedRate)) return false;
+    }
 
     const unitsPerPacket = getProductUnitsPerPacket(product);
     if (unitsPerPacket && item.sellByPacket) {
@@ -238,7 +244,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
       return currentItems;
     });
-  }, [items, products, priceCategory]);
+  }, [items, products, priceCategory, paymentType]);
 
   const handleCustomerChange = (cusId: string) => {
     setSelectedCustomerId(cusId);
@@ -299,12 +305,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         ? rawPackets
         : undefined;
 
-      const unitPrice = calculateEffectiveItemRate({
+      const isManualCategoryD = priceCategory === 'D';
+      const parsedManualRate = isManualCategoryD && item.manualRate !== undefined && item.manualRate !== ''
+        ? Number(item.manualRate)
+        : null;
+
+      const autoRate = calculateEffectiveItemRate({
         product,
         category: priceCategory,
         innerProduct,
         capProduct
-      }) ?? 0;
+      });
+
+      const effectiveRate = isManualCategoryD
+        ? (parsedManualRate !== null && Number.isFinite(parsedManualRate) ? parsedManualRate : autoRate)
+        : autoRate;
+
+      const unitPrice = effectiveRate ?? 0;
 
       const isCombo = Boolean(product.type === 'bottle' && (innerProduct || capProduct));
       const packagingMode: PackagingMode =
@@ -593,25 +610,36 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       return;
     }
 
-    const invalidPriceItem = validItems.find((item) => {
-      const product = products.find((candidate) => candidate.id === item.productId);
-      if (!product) return true;
-      const { innerProduct, capProduct } = getComboComponents(item, product);
-      const rate = calculateEffectiveItemRate({
-        product,
-        category: priceCategory,
-        innerProduct,
-        capProduct
-      });
-      return !isValidProductPrice(rate);
-    });
+    const isDeliveryChallan = paymentType === 'delivery_challan';
 
-    if (invalidPriceItem) {
-      const product = products.find((candidate) => candidate.id === invalidPriceItem.productId);
-      setError(`Product "${product?.name || 'Selected product'}" does not have a valid price for Category ${priceCategory}. Please configure product prices in Product Directory before creating this order.`);
-      setSubmittingMode(null);
-      isSubmittingRef.current = false;
-      return;
+    if (!isDeliveryChallan) {
+      const invalidPriceItem = validItems.find((item) => {
+        const product = products.find((candidate) => candidate.id === item.productId);
+        if (!product) return true;
+        const { innerProduct, capProduct } = getComboComponents(item, product);
+        const autoRate = calculateEffectiveItemRate({
+          product,
+          category: priceCategory,
+          innerProduct,
+          capProduct
+        });
+        const resolvedRate = priceCategory === 'D' && item.manualRate !== undefined && item.manualRate !== ''
+          ? Number(item.manualRate)
+          : autoRate;
+        return !isValidProductPrice(resolvedRate);
+      });
+
+      if (invalidPriceItem) {
+        const product = products.find((candidate) => candidate.id === invalidPriceItem.productId);
+        if (priceCategory === 'D') {
+          setError(`Please enter a valid rate for "${product?.name || 'Selected product'}" in Category D.`);
+        } else {
+          setError(`Product "${product?.name || 'Selected product'}" does not have a valid price for Category ${priceCategory}. Please configure product prices in Product Directory before creating this order.`);
+        }
+        setSubmittingMode(null);
+        isSubmittingRef.current = false;
+        return;
+      }
     }
 
     const invalidQuantityItem = validItems.find((item) => {
@@ -991,7 +1019,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           <div className="hidden md:grid grid-cols-[minmax(220px,1.2fr)_150px_minmax(170px,1.4fr)_130px_40px] gap-3 px-3.5 py-2 bg-slate-200/50 rounded-xl text-[11px] font-bold text-slate-600 uppercase tracking-wider">
             <div>{t('Product Name')}</div>
             <div>{t('Qty / Packets')}</div>
-            <div>{t('Rate (₹)')}</div>
+            <div>
+              {paymentType === 'delivery_challan'
+                ? `${t('Rate (₹)')} (${t('Optional')})`
+                : priceCategory === 'D'
+                ? `${t('Rate (₹)')} (${t('Manual')})`
+                : t('Rate (₹)')}
+            </div>
             <div className="text-right">{t('Subtotal (₹)')}</div>
             <div className="text-center">{t('Action')}</div>
           </div>
@@ -1001,12 +1035,19 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               const product = products.find((candidate) => candidate.id === item.productId);
               const { innerProduct, capProduct } = getComboComponents(item, product);
 
-              const effectiveRate = calculateEffectiveItemRate({
+              const autoRate = calculateEffectiveItemRate({
                 product: product!,
                 category: priceCategory,
                 innerProduct,
                 capProduct
               });
+              const isManualCategoryD = priceCategory === 'D';
+              const parsedManualRate = isManualCategoryD && item.manualRate !== undefined && item.manualRate !== ''
+                ? Number(item.manualRate)
+                : null;
+              const effectiveRate = isManualCategoryD
+                ? (parsedManualRate !== null && Number.isFinite(parsedManualRate) ? parsedManualRate : autoRate)
+                : autoRate;
               const hasValidPrice = isValidProductPrice(effectiveRate);
               const unitPrice = effectiveRate ?? 0;
               const prevRates = getPreviousRatesForProduct(orders, item.productId, selectedCustomerId, 3);
@@ -1199,7 +1240,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                                   placeholder="0"
                                   value={item.loosePieces === '' ? '' : String(item.loosePieces)}
                                   onChange={(e) => {
-                                    const value = e.target.value;
+                                    const value = cleanIntegerInput(e.target.value);
                                     const loose = value === '' ? '' : value;
                                     const packets = Number(item.packetCount || 0);
                                     updateItem(item.id, {
@@ -1325,45 +1366,99 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
                     {/* Rate */}
                     <div>
-                      <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Rate (₹)')}</label>
-                      <div
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleRowEnter(index);
-                          }
-                        }}
-                        className={`h-10 flex items-center justify-between px-3 text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                          !product
-                            ? 'bg-slate-100 text-slate-400 border-slate-200'
-                            : hasValidPrice
-                            ? 'bg-slate-100 text-slate-800 border-slate-200/80'
-                            : 'bg-rose-50 text-rose-600 border-rose-200'
-                        }`}
-                      >
-                        <span>{hasValidPrice ? `₹${unitPrice.toFixed(2)}` : (product ? t('No Price') : '-')}</span>
-                        {hasComboConfigured && hasValidPrice && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold uppercase tracking-tight">
-                            Combo
+                      <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">
+                        {t('Rate (₹)')} {paymentType === 'delivery_challan' ? `(${t('Optional')})` : isManualCategoryD ? `(${t('Manual')})` : ''}
+                      </label>
+                      {isManualCategoryD ? (
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            step="any"
+                            placeholder={autoRate ? autoRate.toFixed(2) : '0.00'}
+                            aria-label={`Manual rate for product ${index + 1}`}
+                            value={item.manualRate === undefined || item.manualRate === null ? '' : String(item.manualRate)}
+                            onChange={(e) => {
+                              const cleaned = cleanDecimalInput(e.target.value);
+                              updateItem(item.id, { manualRate: cleaned });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleRowEnter(index);
+                              }
+                            }}
+                            className={`w-full h-10 pl-7 pr-3 bg-white text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 ${
+                              hasValidPrice
+                                ? 'text-slate-800 border-indigo-300 focus:ring-indigo-500/20'
+                                : 'text-slate-800 border-amber-300 focus:ring-amber-500/20'
+                            }`}
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleRowEnter(index);
+                            }
+                          }}
+                          className={`h-10 flex items-center justify-between px-3 text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                            !product
+                              ? 'bg-slate-100 text-slate-400 border-slate-200'
+                              : paymentType === 'delivery_challan' && !hasValidPrice
+                              ? 'bg-slate-100/60 text-slate-400 border-slate-200'
+                              : hasValidPrice
+                              ? 'bg-slate-100 text-slate-800 border-slate-200/80'
+                              : 'bg-rose-50 text-rose-600 border-rose-200'
+                          }`}
+                        >
+                          <span>
+                            {hasValidPrice
+                              ? `₹${unitPrice.toFixed(2)}`
+                              : paymentType === 'delivery_challan'
+                              ? (product ? t('— (Optional)') : '-')
+                              : (product ? t('No Price') : '-')}
                           </span>
-                        )}
-                      </div>
-                      <div className={`text-[10px] font-semibold mt-1 truncate ${hasValidPrice ? 'text-blue-600' : 'text-rose-600'}`}>
-                        {hasValidPrice
+                          {hasComboConfigured && hasValidPrice && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold uppercase tracking-tight">
+                              Combo
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className={`text-[10px] font-semibold mt-1 truncate ${
+                        isManualCategoryD
+                          ? (hasValidPrice ? 'text-indigo-600' : 'text-amber-600')
+                          : (hasValidPrice ? 'text-blue-600' : paymentType === 'delivery_challan' ? 'text-slate-500' : 'text-rose-600')
+                      }`}>
+                        {isManualCategoryD
+                          ? (hasValidPrice ? t('Custom Rate (Category D)') : t('Enter rate manually'))
+                          : hasValidPrice
                           ? (isBottle && innerProduct && capProduct && configuredComboPrice
                               ? `Configured Combo (Cat ${priceCategory})`
                               : `Auto: Category ${priceCategory}`)
-                          : (product ? `Missing Cat ${priceCategory} price` : '')}
+                          : (product ? (paymentType === 'delivery_challan' ? t('Rate optional for challan') : `Missing Cat ${priceCategory} price`) : '')}
                       </div>
                       {product && (
                         <div
+                          onClick={() => {
+                            if (isManualCategoryD && prevRates.length > 0) {
+                              updateItem(item.id, { manualRate: String(prevRates[0]) });
+                            }
+                          }}
                           className={`text-[10px] font-semibold mt-0.5 truncate ${
-                            prevRates.length > 0 ? 'text-amber-600' : 'text-slate-400'
+                            prevRates.length > 0
+                              ? isManualCategoryD
+                                ? 'text-amber-600 cursor-pointer hover:underline'
+                                : 'text-amber-600'
+                              : 'text-slate-400'
                           }`}
                           title={
                             prevRates.length > 0
-                              ? `Previous ${prevRates.length} order rate${prevRates.length > 1 ? 's' : ''}: ${prevRates.map((r) => `₹${r.toFixed(2)}`).join(' • ')}`
+                              ? `Previous ${prevRates.length} order rate${prevRates.length > 1 ? 's' : ''}: ${prevRates.map((r) => `₹${r.toFixed(2)}`).join(' • ')}${isManualCategoryD ? ' (click to use latest rate)' : ''}`
                               : t('No previous rate')
                           }
                         >
@@ -1376,7 +1471,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                     <div>
                       <label className="block md:hidden text-[11px] font-semibold text-slate-600 mb-1">{t('Subtotal (₹)')}</label>
                       <div className="h-10 flex items-center justify-end px-3 font-bold text-xs rounded-xl border bg-slate-50 text-slate-900 border-slate-200/80">
-                        ₹{(unitPrice * itemQuantity).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {paymentType === 'delivery_challan' && !hasValidPrice
+                          ? '—'
+                          : `₹${(unitPrice * itemQuantity).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </div>
                     </div>
 
@@ -1589,11 +1686,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
             {t('Select Customer Price Category')}
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { key: 'A' as PriceCategory, label: t('Category A (Standard)'), desc: t('Standard retail customer pricing') },
               { key: 'B' as PriceCategory, label: t('Category B (Wholesale)'), desc: t('Discounted wholesale rate') },
-              { key: 'C' as PriceCategory, label: t('Category C (Special)'), desc: t('Special volume contract rate') }
+              { key: 'C' as PriceCategory, label: t('Category C (Special)'), desc: t('Special volume contract rate') },
+              { key: 'D' as PriceCategory, label: t('Category D (Manual)'), desc: t('Enter custom rate manually per product') }
             ].map((tier) => {
               const selected = priceCategory === tier.key;
 
@@ -1613,7 +1711,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-500">{tier.desc}</p>
                   <div className="mt-2 text-xs font-semibold text-slate-800">
-                    {orderItems.length} {t(orderItems.length === 1 ? 'item' : 'items')} {t("use this category's product prices")}
+                    {orderItems.length} {t(orderItems.length === 1 ? 'item' : 'items')} {tier.key === 'D' ? t('use manually entered rates') : paymentType === 'delivery_challan' ? t('(rates optional in challan mode)') : t("use this category's product prices")}
                   </div>
                 </div>
               );
@@ -1703,11 +1801,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-xs text-slate-900">{t('Delivery Challan')}</span>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase">
-                      {t('Payment pending')}
+                      {t('Material Dispatch')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {t('No payment is recorded. Create or print the delivery challan from Sales & Orders.')}
+                    {t('Rate is optional. No payment or revenue is recorded. Dispatch stock and print challan from Sales & Orders.')}
                   </p>
                 </div>
               </label>
@@ -1816,6 +1914,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
             <div className="flex justify-between text-[11px] text-purple-300/80 pt-1 border-t border-slate-800">
               <span>Financial / Ledger Impact:</span>
               <span className="font-semibold text-purple-300">None (Excluded)</span>
+            </div>
+          )}
+
+          {orderType !== 'AS' && paymentType === 'delivery_challan' && (
+            <div className="flex justify-between text-[11px] text-indigo-300/90 pt-1 border-t border-slate-800">
+              <span>{t('Delivery Challan Mode:')}</span>
+              <span className="font-semibold text-indigo-300">{t('Rates optional • Material dispatch tracking')}</span>
             </div>
           )}
 
