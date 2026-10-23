@@ -376,6 +376,7 @@ export interface FinishedGoodsLog {
   source?: string;
   createdAt?: string;
   notes?: string;
+  wastagePieces?: number; // Number of wasted finished-product pieces
 }
 
 export type DocumentCategory = 'gst' | 'invoice' | 'bill' | 'kyc' | 'contract' | 'general';

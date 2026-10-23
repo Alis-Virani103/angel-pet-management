@@ -8,7 +8,7 @@ import { calculatePacketUnits, getProductUnitsPerPacket, isPositiveInteger, pars
 import { getProductPriceForCategory, isValidProductPrice, getPreviousRatesForProduct, formatPreviousRates, calculateEffectiveItemRate, getBottleComboPrice } from '../../utils/pricingUtils';
 import { formatPackagingMode } from '../../utils/packagingUtils';
 import { printInvoice } from '../../utils/invoicePrintUtils';
-import { formatWeight, formatPieceWeight, calculateItemWeightGrams, calculateOrderTotalWeightGrams } from '../../utils/weightUtils';
+import { formatWeight, formatPieceWeight, calculateItemWeightGrams, calculateOrderTotalWeightGrams, getWeightInGrams } from '../../utils/weightUtils';
 
 interface NewOrderModalProps {
   isOpen: boolean;
@@ -1535,7 +1535,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               .filter((p) => p.type === 'inner')
                               .map((inner) => (
                                 <option key={inner.id} value={inner.id}>
-                                  {inner.name} ({inner.sizeOrType || inner.sku})
+                                  {inner.name} ({inner.sizeOrType || inner.sku}){inner.weightPerPiece ? ` - ${formatPieceWeight(inner.weightPerPiece, inner.weightUnit || 'g')}` : ''}
                                 </option>
                               ))}
                           </select>
@@ -1555,7 +1555,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               .filter((p) => p.type === 'cap')
                               .map((cap) => (
                                 <option key={cap.id} value={cap.id}>
-                                  {cap.name} ({cap.sizeOrType || cap.sku})
+                                  {cap.name} ({cap.sizeOrType || cap.sku}){cap.weightPerPiece ? ` - ${formatPieceWeight(cap.weightPerPiece, cap.weightUnit || 'g')}` : ''}
                                 </option>
                               ))}
                           </select>
@@ -1575,11 +1575,35 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           {innerProduct && (
                             <span className="bg-white/80 px-2 py-0.5 rounded border border-indigo-200/60">
                               Inner: {innerProduct.name} × {itemQuantity.toLocaleString()}
+                              {(() => {
+                                const grams = getWeightInGrams(innerProduct.weightPerPiece, innerProduct.weightUnit || 'g');
+                                return grams !== null ? (
+                                  <span className="text-[10px] text-indigo-600 ml-1">
+                                    ({formatWeight(grams * itemQuantity)})
+                                  </span>
+                                ) : null;
+                              })()}
                             </span>
                           )}
                           {capProduct && (
                             <span className="bg-white/80 px-2 py-0.5 rounded border border-indigo-200/60">
                               Cap: {capProduct.name} × {itemQuantity.toLocaleString()}
+                              {(() => {
+                                const grams = getWeightInGrams(capProduct.weightPerPiece, capProduct.weightUnit || 'g');
+                                return grams !== null ? (
+                                  <span className="text-[10px] text-indigo-600 ml-1">
+                                    ({formatWeight(grams * itemQuantity)})
+                                  </span>
+                                ) : null;
+                              })()}
+                            </span>
+                          )}
+                          {(innerProduct?.weightPerPiece || capProduct?.weightPerPiece) && (
+                            <span className="text-[10px] text-indigo-600 italic ml-2">
+                              (Total: {formatWeight(
+                                (getWeightInGrams(innerProduct?.weightPerPiece, innerProduct?.weightUnit || 'g') || 0) * itemQuantity +
+                                (getWeightInGrams(capProduct?.weightPerPiece, capProduct?.weightUnit || 'g') || 0) * itemQuantity
+                              )})
                             </span>
                           )}
                           <span className="text-[10px] text-indigo-600 italic">

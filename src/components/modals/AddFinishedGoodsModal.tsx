@@ -127,11 +127,8 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const totalMaterialQuantityKg = totalWeightKg;
   const wastage1Number = Number(wastage1) || 0;
   const wastage2Number = Number(wastage2) || 0;
-  const netMaterialQuantityKg = calculateNetProductionQuantity(
-    totalMaterialQuantityKg,
-    wastage1Number,
-    wastage2Number
-  );
+  // Wastage is now piece counts, not kg - do not subtract from raw material kg
+  const netMaterialQuantityKg = totalMaterialQuantityKg;
   const toMaterialBaseQuantity = (quantityKg: number) => {
     if (!selectedMaterial) return 0;
     const baseUnit = (selectedMaterial.baseUnit || selectedMaterial.unit).toLowerCase();
@@ -154,12 +151,9 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const netMaterialQuantity = selectedMaterial
     ? fromBaseQuantity(netMaterialBaseQuantity, materialUnit, selectedMaterial)
     : 0;
-  const wastage1Quantity = selectedMaterial
-    ? fromBaseQuantity(toMaterialBaseQuantity(wastage1Number), materialUnit, selectedMaterial)
-    : 0;
-  const wastage2Quantity = selectedMaterial
-    ? fromBaseQuantity(toMaterialBaseQuantity(wastage2Number), materialUnit, selectedMaterial)
-    : 0;
+  // Wastage is now piece counts, not kg - save as pieces in 'pcs' unit
+  const wastage1Quantity = wastage1Number;
+  const wastage2Quantity = wastage2Number;
   const equivalentPieces = selectedMaterial && netMaterialQuantityKg > 0
     ? weightCalculation.isValid && weightCalculation.pieces !== null && totalWeightKg > 0
       ? weightCalculation.pieces * (netMaterialQuantityKg / totalWeightKg)
@@ -198,10 +192,15 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       setError('Wastage values cannot be negative.');
       return;
     }
-    if (netMaterialQuantityKg <= 0) {
-      setError('Total wastage must be less than the total raw-material quantity.');
+    if (wastage1Number > 0 && !Number.isInteger(wastage1Number)) {
+      setError('Wastage 1 must be a whole number (pieces).');
       return;
     }
+    if (wastage2Number > 0 && !Number.isInteger(wastage2Number)) {
+      setError('Wastage 2 must be a whole number (pieces).');
+      return;
+    }
+    // Wastage is now separate from raw material consumption, so no need to check netMaterialQuantityKg
     if (totalMaterialBaseQuantity > selectedMaterial.currentStock) {
       setError(`Insufficient stock. Available: ${formatQuantityWithUnit(materialStock?.baseQuantity, materialStock?.baseUnit)}.`);
       return;
@@ -217,13 +216,15 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         materialName: selectedMaterial.name,
         quantity: netMaterialQuantity,
         unit: materialUnit,
-        wastage1: wastage1Quantity || undefined,
-        wastage2: wastage2Quantity || undefined,
+        wastage1: wastage1Quantity > 0 ? wastage1Quantity : undefined,
+        wastage2: wastage2Quantity > 0 ? wastage2Quantity : undefined,
+        baseQuantity: netMaterialBaseQuantity,
+        baseUnit: selectedMaterial.baseUnit,
         equivalentPieces: equivalentPieces || undefined,
         totalDeduction: totalMaterialQuantity,
         date: productionDate,
         productionBatch: batch,
-        notes: `Consumed for ${selectedProduct.name} production`
+        notes: `Consumed for ${selectedProduct.name} production. Wastage: ${wastage1Quantity + wastage2Quantity} pieces`
       });
       await addFinishedGoodsLog({
         productId: selectedProduct.id,
@@ -233,7 +234,8 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         unit: selectedProduct.unit || 'pcs',
         date: productionDate,
         source: 'Production',
-        notes: notes.trim()
+        notes: notes.trim(),
+        wastagePieces: wastage1Number + wastage2Number > 0 ? wastage1Number + wastage2Number : undefined
       });
 
       onStockAdded?.();
@@ -365,12 +367,12 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="form-label">Wastage 1 (kg, Optional)</label>
-            <input type="number" min={0} step="0.01" value={wastage1} onChange={(e) => setWastage1(e.target.value)} className="form-input" />
+            <label className="form-label">Wastage 1 (Pieces, Optional)</label>
+            <input type="number" min={0} step="1" value={wastage1} onChange={(e) => setWastage1(e.target.value)} className="form-input" />
           </div>
           <div>
-            <label className="form-label">Wastage 2 (kg, Optional)</label>
-            <input type="number" min={0} step="0.01" value={wastage2} onChange={(e) => setWastage2(e.target.value)} className="form-input" />
+            <label className="form-label">Wastage 2 (Pieces, Optional)</label>
+            <input type="number" min={0} step="1" value={wastage2} onChange={(e) => setWastage2(e.target.value)} className="form-input" />
           </div>
         </div>
 
