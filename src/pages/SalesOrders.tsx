@@ -417,10 +417,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                 }}
               >
                 {/* Challan Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2.5px solid #2563eb', paddingBottom: '14px', marginBottom: '16px' }}>
-                  <div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#1e3a8a', letterSpacing: '-0.5px' }}>ANGEL PET</div>
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', borderBottom: '2.5px solid #2563eb', paddingBottom: '14px', marginBottom: '16px' }}>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{
                       display: 'inline-block',
@@ -434,9 +431,6 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                       letterSpacing: '0.5px'
                     }}>
                       {printDispatch ? 'SUB-DELIVERY CHALLAN' : 'DELIVERY CHALLAN'}
-                    </div>
-                    <div style={{ fontSize: '11px', marginTop: '8px', fontWeight: 700, color: '#334155' }}>
-                      #{printDispatch?.dispatchNumber || printOrder.orderNumber}
                     </div>
                     <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
                       Date: {formatDate(printDispatch?.dispatchDate || printOrder.orderDate)}
@@ -452,9 +446,8 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                     <div style={{ fontSize: '10px', marginTop: '3px', color: '#475569' }}>Attn: {printOrder.customerName}</div>
                   </div>
                   <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px' }}>Order Reference</div>
-                    <div style={{ fontWeight: 800, marginTop: '5px', fontSize: '13px', color: '#0f172a' }}>{printOrder.orderNumber}</div>
-                    <div style={{ fontSize: '10px', marginTop: '3px', color: '#475569' }}>
+                    <div style={{ fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px' }}>Delivery Details</div>
+                    <div style={{ fontSize: '10px', marginTop: '5px', color: '#475569' }}>
                       {printDispatch ? 'Sub-delivery quantities' : 'Initial delivery quantities'}
                     </div>
                     {printDispatch && (

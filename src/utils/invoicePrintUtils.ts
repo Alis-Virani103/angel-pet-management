@@ -365,7 +365,7 @@ export function generateInvoiceHtml(
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${titleText} (${memoLabel}) - ${order.orderNumber}</title>
+  <title>${titleText} (${memoLabel})${!isChallan ? ` - ${order.orderNumber}` : ''}</title>
   <style>
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
@@ -407,7 +407,7 @@ export function generateInvoiceHtml(
         <tr>
           <!-- LEFT: Company Branding -->
           <td style="vertical-align: top; width: 55%;">
-            ${isGst ? `
+            ${!isChallan && isGst ? `
               ${companyName ? `<div style="font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; line-height: 1.2;">${companyName}</div>` : ''}
               ${(companyAddress || companyPhone || companyEmail) ? `<div style="font-size: 9px; color: #475569; line-height: 1.5; margin-top: 4px;">
                 ${companyAddress ? `<div>${companyAddress}</div>` : ''}
@@ -415,9 +415,9 @@ export function generateInvoiceHtml(
                 ${companyGstin ? `<div style="font-weight: 700; color: #0f172a; margin-top: 2px;">GSTIN: ${companyGstin}</div>` : ''}
               </div>` : ''}
             ` : `
-              <!-- Minimal header for non-GST bills -->
+              <!-- Minimal header for non-GST bills or challans -->
               <div style="font-size: 14px; font-weight: 700; color: #475569;">
-                Delivery Estimate / Kachha Bill
+                ${isChallan ? 'Delivery Challan' : 'Delivery Estimate / Kachha Bill'}
               </div>
             `}
           </td>
@@ -435,10 +435,12 @@ export function generateInvoiceHtml(
             <div style="margin-top: 6px; display: inline-block; text-align: right;">
               <table style="font-size: 9.5px; border-collapse: collapse; margin-left: auto;">
                 <tbody>
+                  ${!isChallan ? `
                   <tr>
                     <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">${isAS ? 'Order No:' : isGst ? 'Invoice No:' : 'Bill No:'}</td>
                     <td style="font-weight: 700; color: #0f172a; padding: 1.5px 0; text-align: right;">${order.orderNumber}</td>
                   </tr>
+                  ` : ''}
                   <tr>
                     <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">Date:</td>
                     <td style="font-weight: 600; color: #0f172a; padding: 1.5px 0; text-align: right;">${formatInvoiceDate(order.orderDate)}</td>
@@ -569,7 +571,7 @@ export function generateInvoiceHtml(
         <tr>
           <td style="width: 50%;"></td>
           <td style="width: 50%; text-align: right;">
-            ${isGst ? `
+            ${!isChallan && isGst ? `
               <div style="font-size: 9.5px; font-weight: 700; color: #0f172a; margin-bottom: 30px;">For ${companyName}</div>
               <div style="font-size: 8.5px; color: #64748b; border-top: 1px solid #cbd5e1; display: inline-block; padding-top: 3px; min-width: 130px; text-align: center;">Authorised Signatory</div>
             ` : ''}
@@ -580,7 +582,9 @@ export function generateInvoiceHtml(
 
     <!-- FOOTER -->
     <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 8px; color: #94a3b8;">
-      ${isGst ? `
+      ${isChallan ? `
+        This is a computer-generated delivery challan.
+      ` : isGst ? `
         ${companyName} &nbsp;|&nbsp; ${companyAddress} ${companyGstin ? `&nbsp;|&nbsp; GSTIN: ${companyGstin}` : ''} &nbsp;|&nbsp; This is a computer-generated tax invoice.
       ` : `
         This is a computer-generated kachha bill.

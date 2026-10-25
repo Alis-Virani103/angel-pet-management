@@ -5,7 +5,8 @@ import {
   addFinishedGoodsLog,
   getProducts,
   getRawMaterials,
-  recordRawMaterialUsage
+  recordRawMaterialUsage,
+  addProduct
 } from '../../services/db';
 import {
   calculateEquivalentPieces,
@@ -17,7 +18,7 @@ import {
 import { calculateNetProductionQuantity } from '../../utils/productionUtils';
 import { addCustomProductType, getAllProductTypes, normalizeProductType } from '../../utils/productTypeUtils';
 import { formatDateForDisplay, formatDateForInput, parseProductionDate } from '../../utils/dateUtils';
-import { AlertCircle, Boxes, Plus, Calendar } from 'lucide-react';
+import { AlertCircle, Boxes, Plus, Calendar, Package } from 'lucide-react';
 
 interface AddFinishedGoodsModalProps {
   isOpen: boolean;
@@ -46,6 +47,25 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const submissionInProgress = useRef(false);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductSku, setNewProductSku] = useState('');
+  const [newProductSize, setNewProductSize] = useState('');
+  const [newProductPriceA, setNewProductPriceA] = useState('');
+  const [newProductPriceB, setNewProductPriceB] = useState('');
+  const [newProductPriceC, setNewProductPriceC] = useState('');
+  const [addingProduct, setAddingProduct] = useState(false);
+  const customTypeInputRef = useRef<HTMLInputElement>(null);
+  const [previousSelectedProductId, setPreviousSelectedProductId] = useState<string | null>(null);
+
+  // Auto-generate SKU when product type changes or modal opens
+  useEffect(() => {
+    if (showAddProductModal) {
+      const typePrefix = productType === 'custom' ? 'CST' : productType === 'bottle' ? 'BTL' : productType === 'cap' ? 'CAP' : 'INR';
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      setNewProductSku(`${typePrefix}-${randomSuffix}`);
+    }
+  }, [showAddProductModal, productType]);
 
   // Get all available product types (standard + custom + from products)
   const availableProductTypes = getAllProductTypes(products);
@@ -63,6 +83,12 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       loadData();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isCustomType && customTypeInputRef.current) {
+      customTypeInputRef.current.focus();
+    }
+  }, [isCustomType]);
 
   const loadData = async () => {
     try {
@@ -100,6 +126,77 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       setSelectedProductId(filtered[0]?.id || '');
     }
   };
+
+  const handleAddNewProduct = async () => {
+    if (!newProductName.trim()) {
+      setError('Please enter a product name.');
+      return;
+    }
+    if (!newProductSku.trim()) {
+      setError('Please enter a product SKU.');
+      return;
+    }
+
+    setAddingProduct(true);
+    setError('');
+    try {
+      const newProduct = await addProduct({
+        name: newProductName.trim(),
+        sku: newProductSku.trim(),
+        type: productType,
+        sizeOrType: newProductSize.trim(),
+        description: '',
+        priceA: Number(newProductPriceA) || 0,
+        priceB: Number(newProductPriceB) || 0,
+        priceC: Number(newProductPriceC) || 0,
+        currentStock: 0,
+        minimumStock: 500,
+        unit: 'pcs',
+        status: 'active'
+      });
+
+      // Reload products and select the newly added one
+      const productList = await getProducts();
+      setProducts(productList);
+      setSelectedProductId(newProduct.id);
+      setShowAddProductModal(false);
+
+      // Reset form fields
+      setNewProductName('');
+      setNewProductSku('');
+      setNewProductSize('');
+      setNewProductPriceA('');
+      setNewProductPriceB('');
+      setNewProductPriceC('');
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Failed to add product.');
+    } finally {
+      setAddingProduct(false);
+    }
+  };
+
+  const handleCloseAddProductModal = () => {
+    setShowAddProductModal(false);
+    // Restore previous selection if no new product was added
+    if (!selectedProductId && previousSelectedProductId) {
+      setSelectedProductId(previousSelectedProductId);
+    }
+    setPreviousSelectedProductId(null);
+  };
+
+  // Reset new product form when modal is closed
+  useEffect(() => {
+    if (!showAddProductModal) {
+      setNewProductName('');
+      setNewProductSku('');
+      setNewProductSize('');
+      setNewProductPriceA('');
+      setNewProductPriceB('');
+      setNewProductPriceC('');
+      setError('');
+    }
+  }, [showAddProductModal]);
 
   const handleMaterialChange = (materialId: string) => {
     setSelectedMaterialId(materialId);
@@ -270,6 +367,7 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
             </select>
             {isCustomType && (
               <input
+                ref={customTypeInputRef}
                 type="text"
                 value={customProductType}
                 onChange={(e) => handleCustomTypeChange(e.target.value)}
@@ -288,13 +386,37 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           </div>
           <div>
             <label className="form-label">Select Manufactured Product</label>
-            <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} className="form-select">
-              {filteredProducts.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} (Current Stock: {product.currentStock.toLocaleString()})
-                </option>
-              ))}
-            </select>
+            {filteredProducts.length === 0 ? (
+              <div className="space-y-2">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                  No products found for {productType === 'custom' ? customProductType : productType}. Add a new product to continue.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(true)}
+                  className="w-full px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-xl border border-blue-200 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Package className="w-4 h-4" />
+                  <span>+ Add New Product</span>
+                </button>
+              </div>
+            ) : (
+              <select value={selectedProductId} onChange={(e) => {
+                if (e.target.value === '') {
+                  setPreviousSelectedProductId(selectedProductId || null);
+                  setShowAddProductModal(true);
+                } else {
+                  setSelectedProductId(e.target.value);
+                }
+              }} className="form-select">
+                {filteredProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} (Current Stock: {product.currentStock.toLocaleString()})
+                  </option>
+                ))}
+                <option value="">+ Add New Product...</option>
+              </select>
+            )}
           </div>
         </div>
 
@@ -388,6 +510,129 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           </button>
         </div>
       </form>
+
+      {/* Add New Product Modal */}
+      {showAddProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900">Add New Product</h2>
+              <button
+                type="button"
+                onClick={handleCloseAddProductModal}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {error && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="form-label">Product Name *</label>
+                <input
+                  type="text"
+                  value={newProductName}
+                  onChange={(e) => setNewProductName(e.target.value)}
+                  placeholder="e.g., 500ml Bottle"
+                  className="form-input"
+                  disabled={addingProduct}
+                />
+              </div>
+              
+              <div>
+                <label className="form-label">SKU *</label>
+                <input
+                  type="text"
+                  value={newProductSku}
+                  onChange={(e) => setNewProductSku(e.target.value)}
+                  placeholder="e.g., BTL-500"
+                  className="form-input"
+                  disabled={addingProduct}
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Size/Type</label>
+                <input
+                  type="text"
+                  value={newProductSize}
+                  onChange={(e) => setNewProductSize(e.target.value)}
+                  placeholder="e.g., 500ml"
+                  className="form-input"
+                  disabled={addingProduct}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="form-label">Price A</label>
+                  <input
+                    type="number"
+                    value={newProductPriceA}
+                    onChange={(e) => setNewProductPriceA(e.target.value)}
+                    placeholder="0.00"
+                    className="form-input"
+                    disabled={addingProduct}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Price B</label>
+                  <input
+                    type="number"
+                    value={newProductPriceB}
+                    onChange={(e) => setNewProductPriceB(e.target.value)}
+                    placeholder="0.00"
+                    className="form-input"
+                    disabled={addingProduct}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Price C</label>
+                  <input
+                    type="number"
+                    value={newProductPriceC}
+                    onChange={(e) => setNewProductPriceC(e.target.value)}
+                    placeholder="0.00"
+                    className="form-input"
+                    disabled={addingProduct}
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+                <span><strong>Product Type:</strong> {productType === 'custom' ? customProductType : productType}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleCloseAddProductModal}
+                className="btn-secondary"
+                disabled={addingProduct}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddNewProduct}
+                disabled={addingProduct}
+                className="btn-primary"
+              >
+                <Package className="w-4 h-4" />
+                <span>{addingProduct ? 'Adding...' : 'Add Product'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 };
