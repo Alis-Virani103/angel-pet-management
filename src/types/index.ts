@@ -73,7 +73,7 @@ export interface Supplier {
   totalOutstanding: number;
 }
 
-export type ProductType = 'bottle' | 'cap' | 'inner';
+export type ProductType = 'bottle' | 'cap' | 'inner' | string;
 export type ProductStatus = 'active' | 'inactive';
 
 export type PackagingMode = 'bottle_only' | 'bottle_cap' | 'bottle_inner_cap';
@@ -187,6 +187,7 @@ export interface Order {
   billType?: 'kachha' | 'pakka';
   paymentType?: 'cash_memo' | 'debit_memo' | 'delivery_challan';
   orderType?: OrderType; // 'REGULAR' by default for backward compatibility
+  createdAt?: string; // ISO timestamp for 24-hour visibility rule
 }
 
 export type PaymentDocumentType = 'cash_memo' | 'debit_memo' | 'delivery_challan';
@@ -340,6 +341,11 @@ export interface PurchaseItem {
   quantity: number;
   subtotal: number;
   taxRate?: number;
+  numberOfBags?: number;
+  weightPerBagKg?: number;
+  weightPerPieceGrams?: number;
+  totalWeightGrams?: number;
+  calculatedPieces?: number;
 }
 
 export interface PurchaseOrder {

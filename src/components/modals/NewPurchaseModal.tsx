@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus, Supplier } from '../../types';
 import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers } from '../../services/db';
-import { toBaseQuantity, formatQuantityWithUnit } from '../../utils/unitConversion';
+import {
+  toBaseQuantity,
+  deriveMaterialBagSpecs,
+  calculateBagPieceConversion,
+  getReceivedPurchaseBaseQuantity
+} from '../../utils/unitConversion';
 import { cleanDecimalInput } from '../../utils/packetUtils';
 import { ShoppingBag, Plus, AlertCircle, CheckCircle2, Search, ChevronDown, Check } from 'lucide-react';
 
@@ -18,6 +23,9 @@ interface DraftPurchaseItem {
   quantity: string;
   unit: string;
   unitCost: string;
+  numberOfBags: string;
+  weightPerBagKg: string;
+  weightPerPieceGrams: string;
 }
 
 const createDraftItem = (rawMaterialId = '', quantity = '', unit = '', unitCost = ''): DraftPurchaseItem => ({
@@ -25,7 +33,10 @@ const createDraftItem = (rawMaterialId = '', quantity = '', unit = '', unitCost 
   rawMaterialId,
   quantity,
   unit,
-  unitCost
+  unitCost,
+  numberOfBags: '',
+  weightPerBagKg: '',
+  weightPerPieceGrams: ''
 });
 
 interface SearchableMaterialSelectProps {
@@ -371,7 +382,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       if (currentItems.length >= 2) {
         const secondLastIndex = currentItems.length - 2;
         const secondLast = currentItems[secondLastIndex];
-        const isLastBlank = !lastItem.rawMaterialId && !lastItem.quantity && !lastItem.unitCost;
+        const isLastBlank = !lastItem.rawMaterialId && !lastItem.quantity && !lastItem.unitCost && !lastItem.numberOfBags;
         const isSecondLastIncomplete = !isItemComplete(secondLast, secondLastIndex);
         if (isSecondLastIncomplete && isLastBlank) {
           return currentItems.slice(0, -1);
@@ -386,6 +397,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     setItems((currentItems) => currentItems.map((item) => item.id === id ? { ...item, ...updates } : item));
   };
 
+  const updateBagConversion = (id: string, field: 'numberOfBags' | 'weightPerBagKg' | 'weightPerPieceGrams', value: string) => {
+    setItems((currentItems) => currentItems.map((item) => {
+      if (item.id !== id) return item;
+      const next = { ...item, [field]: value };
+      const unit = (item.unit || '').toLowerCase();
+      if (field === 'numberOfBags' && (unit === 'bag' || unit === 'bags' || !item.quantity || item.quantity === item.numberOfBags)) {
+        next.quantity = value;
+      }
+      return next;
+    }));
+  };
+
   const removeItem = (id: string) => {
     setItems((currentItems) => {
       const filtered = currentItems.filter((candidate) => candidate.id !== id);
@@ -398,10 +421,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
 
   const handleMaterialChange = (id: string, materialId: string) => {
     const material = materials.find((candidate) => candidate.id === materialId);
+    const specs = material ? deriveMaterialBagSpecs(material) : {};
     updateItem(id, {
       rawMaterialId: materialId,
       unit: material?.purchaseUnit || material?.unit || '',
-      unitCost: material ? String(material.unitCost) : ''
+      unitCost: material ? String(material.unitCost) : '',
+      numberOfBags: '',
+      weightPerBagKg: specs.weightPerBagKg ? String(specs.weightPerBagKg) : '',
+      weightPerPieceGrams: specs.weightPerPieceGrams ? String(specs.weightPerPieceGrams) : ''
     });
     if (material?.supplier && !selectedSupplier) {
       const materialSupplier = material.supplier.trim().toLowerCase();
@@ -413,25 +440,44 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     }
   };
 
+  const toPurchaseItem = (item: DraftPurchaseItem, index: number, useInlineName: boolean): PurchaseItem => {
+    const isFirstItemWithInline = isInlineMaterial && (index === 0 || item.id === items[0]?.id);
+    const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
+    const quantity = Number(item.quantity) || 0;
+    const unitCost = Number(item.unitCost) || 0;
+    const conversion = Number(item.numberOfBags) > 0
+      ? calculateBagPieceConversion({
+          numberOfBags: Number(item.numberOfBags),
+          weightPerBagKg: Number(item.weightPerBagKg),
+          weightPerPieceGrams: Number(item.weightPerPieceGrams)
+        })
+      : null;
+    const conversionFields = conversion && !('error' in conversion)
+      ? {
+          numberOfBags: Number(item.numberOfBags),
+          weightPerBagKg: Number(item.weightPerBagKg),
+          weightPerPieceGrams: Number(item.weightPerPieceGrams),
+          totalWeightGrams: conversion.totalWeightGrams,
+          calculatedPieces: conversion.calculatedPieces
+        }
+      : {};
+    return {
+      rawMaterialId: useInlineName && isFirstItemWithInline ? '' : item.rawMaterialId,
+      rawMaterialName: isFirstItemWithInline ? (newMaterialName.trim() || 'New Raw Material') : (material?.name || ''),
+      hsnSac: isFirstItemWithInline ? newMaterialCode.trim() : (material?.code || ''),
+      category: isFirstItemWithInline ? newMaterialCategory : (material?.category || 'granules'),
+      unit: item.unit || (isFirstItemWithInline ? newMaterialPurchaseUnit : material?.purchaseUnit) || material?.unit || newMaterialUnit,
+      unitCost,
+      quantity,
+      subtotal: quantity * unitCost,
+      taxRate: includeGst ? 18 : 0,
+      ...conversionFields
+    };
+  };
+
   const validPurchaseItems = items
     .filter((item, index) => isItemComplete(item, index))
-    .map((item, index): PurchaseItem => {
-      const isFirstItemWithInline = isInlineMaterial && (index === 0 || item.id === items[0]?.id);
-      const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
-      const quantity = Number(item.quantity) || 0;
-      const unitCost = Number(item.unitCost) || 0;
-      return {
-        rawMaterialId: isFirstItemWithInline ? '' : item.rawMaterialId,
-        rawMaterialName: isFirstItemWithInline ? (newMaterialName.trim() || 'New Raw Material') : (material?.name || ''),
-        hsnSac: isFirstItemWithInline ? newMaterialCode.trim() : (material?.code || ''),
-        category: isFirstItemWithInline ? newMaterialCategory : (material?.category || 'granules'),
-        unit: item.unit || (isFirstItemWithInline ? newMaterialPurchaseUnit : material?.purchaseUnit) || material?.unit || newMaterialUnit,
-        unitCost,
-        quantity,
-        subtotal: quantity * unitCost,
-        taxRate: includeGst ? 18 : 0
-      };
-    });
+    .map((item, index): PurchaseItem => toPurchaseItem(item, index, true));
   const subtotal = validPurchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
   const gstAmount = includeGst ? subtotal * 0.18 : 0;
   const grandTotal = subtotal + gstAmount;
@@ -444,9 +490,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     const nonBlankItems = items.filter((item, index) => {
       const isFirstItemWithInline = isInlineMaterial && (index === 0 || item.id === items[0]?.id);
       if (isFirstItemWithInline) {
-        return item.quantity !== '' || item.unitCost !== '' || newMaterialName.trim() !== '' || newMaterialCode.trim() !== '';
+        return item.quantity !== '' || item.unitCost !== '' || item.numberOfBags !== '' || newMaterialName.trim() !== '' || newMaterialCode.trim() !== '';
       }
-      return item.rawMaterialId || item.quantity !== '' || item.unitCost !== '';
+      return item.rawMaterialId || item.quantity !== '' || item.unitCost !== '' || item.numberOfBags !== '';
     });
 
     if (nonBlankItems.length === 0) {
@@ -467,6 +513,25 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       setError('Please enter a valid material, quantity (> 0), and rate (>= 0) for all started line items.');
       return;
     }
+
+    const invalidConversion = nonBlankItems.find((item) => {
+      if (!item.numberOfBags.trim()) return false;
+      const conversion = calculateBagPieceConversion({
+        numberOfBags: Number(item.numberOfBags),
+        weightPerBagKg: Number(item.weightPerBagKg),
+        weightPerPieceGrams: Number(item.weightPerPieceGrams)
+      });
+      return 'error' in conversion;
+    });
+    if (invalidConversion) {
+      const conversion = calculateBagPieceConversion({
+        numberOfBags: Number(invalidConversion.numberOfBags),
+        weightPerBagKg: Number(invalidConversion.weightPerBagKg),
+        weightPerPieceGrams: Number(invalidConversion.weightPerPieceGrams)
+      });
+      setError('error' in conversion ? conversion.error : 'Enter number of bags, weight per bag (kg), and weight per piece (g).');
+      return;
+    }
     if (!selectedSupplier) {
       setError(suppliers.length === 0
         ? 'No saved suppliers are available. Add a supplier before recording a purchase.'
@@ -475,21 +540,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     }
 
     const completedPurchaseItems = nonBlankItems.map((item, index): PurchaseItem => {
-      const isFirstItemWithInline = isInlineMaterial && (index === 0 || item.id === items[0]?.id);
-      const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
-      const quantity = Number(item.quantity) || 0;
-      const unitCost = Number(item.unitCost) || 0;
-      return {
-        rawMaterialId: item.rawMaterialId,
-        rawMaterialName: isFirstItemWithInline ? newMaterialName.trim() : (material?.name || ''),
-        hsnSac: isFirstItemWithInline ? newMaterialCode.trim() : (material?.code || ''),
-        category: isFirstItemWithInline ? newMaterialCategory : (material?.category || 'granules'),
-        unit: item.unit || (isFirstItemWithInline ? newMaterialPurchaseUnit : material?.purchaseUnit) || material?.unit || newMaterialUnit,
-        unitCost,
-        quantity,
-        subtotal: quantity * unitCost,
-        taxRate: includeGst ? 18 : 0
-      };
+      const mapped = toPurchaseItem(item, index, false);
+      return { ...mapped, rawMaterialId: item.rawMaterialId };
     });
 
     submissionInProgress.current = true;
@@ -603,10 +655,41 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
               const lineQty = Number(item.quantity) || 0;
               const lineCost = Number(item.unitCost) || 0;
               const lineSubtotal = lineQty * lineCost;
-              const isOnlyBlankRow = items.length === 1 && !item.rawMaterialId && !item.quantity && !item.unitCost;
+              const isOnlyBlankRow = items.length === 1 && !item.rawMaterialId && !item.quantity && !item.unitCost && !item.numberOfBags;
+              const bagConversion = Number(item.numberOfBags) > 0
+                ? calculateBagPieceConversion({
+                    numberOfBags: Number(item.numberOfBags),
+                    weightPerBagKg: Number(item.weightPerBagKg),
+                    weightPerPieceGrams: Number(item.weightPerPieceGrams)
+                  })
+                : null;
+              const inlineMaterialForStock: RawMaterial = {
+                id: '',
+                name: newMaterialName,
+                code: newMaterialCode,
+                category: newMaterialCategory,
+                currentStock: 0,
+                minimumStock: 0,
+                unit: newMaterialUnit,
+                baseUnit: newMaterialBaseUnit,
+                purchaseUnit: newMaterialPurchaseUnit,
+                consumptionUnit: newMaterialConsumptionUnit,
+                conversionFactor: Number(newMaterialConversionFactor) || 1,
+                piecesPerBaseUnit: newMaterialPiecesPerBaseUnit !== '' ? Number(newMaterialPiecesPerBaseUnit) : undefined,
+                unitCost: 0,
+                supplier: '',
+                status: 'healthy',
+                lastRestocked: ''
+              };
+              const stockMaterial = isFirstItemWithInline ? inlineMaterialForStock : material;
+              const previewPurchaseItem = toPurchaseItem(item, index, false);
+              const stockAddition = stockMaterial
+                ? getReceivedPurchaseBaseQuantity(previewPurchaseItem, stockMaterial)
+                : toBaseQuantity(lineQty, item.unit, inlineMaterialForStock);
 
               return (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(120px,0.9fr)_minmax(110px,0.8fr)_minmax(150px,1fr)_minmax(155px,1fr)_auto] gap-x-3 gap-y-3 items-end p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <div key={item.id} className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(120px,0.9fr)_minmax(110px,0.8fr)_minmax(150px,1fr)_minmax(155px,1fr)_auto] gap-x-3 gap-y-3 items-end">
                   <div className="min-w-0">
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">Product / Material {index + 1}</label>
                     {isFirstItemWithInline ? (
@@ -691,31 +774,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                         ))
                       ) : null}
                     </select>
-                    {isFirstItemWithInline && item.quantity && (
+                    {(isFirstItemWithInline || (material && item.unit)) && (item.quantity || item.numberOfBags) && (
                       <div className="text-[10px] text-slate-500 mt-1.5">
-                        Stock addition: {toBaseQuantity(lineQty, item.unit || newMaterialPurchaseUnit, {
-                          id: '',
-                          name: newMaterialName,
-                          code: newMaterialCode,
-                          category: newMaterialCategory,
-                          currentStock: 0,
-                          minimumStock: 0,
-                          unit: newMaterialUnit,
-                          baseUnit: newMaterialBaseUnit,
-                          purchaseUnit: newMaterialPurchaseUnit,
-                          consumptionUnit: newMaterialConsumptionUnit,
-                          conversionFactor: Number(newMaterialConversionFactor) || 1,
-                          piecesPerBaseUnit: newMaterialPiecesPerBaseUnit !== '' ? Number(newMaterialPiecesPerBaseUnit) : undefined,
-                          unitCost: 0,
-                          supplier: '',
-                          status: 'healthy',
-                          lastRestocked: ''
-                        }).toLocaleString('en-IN', { maximumFractionDigits: 3 })} {newMaterialBaseUnit}
-                      </div>
-                    )}
-                    {!isFirstItemWithInline && material && item.quantity && item.unit && (
-                      <div className="text-[10px] text-slate-500 mt-1.5">
-                        Stock addition: {toBaseQuantity(lineQty, item.unit, material).toLocaleString('en-IN', { maximumFractionDigits: 3 })} {material.baseUnit}
+                        Stock addition: {stockAddition.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {stockMaterial?.baseUnit || item.unit}
                       </div>
                     )}
                   </div>
@@ -741,6 +802,68 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                   >
                     Remove
                   </button>
+                </div>
+                {(item.rawMaterialId || isFirstItemWithInline) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Number of bags</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Number of bags for purchase item ${index + 1}`}
+                        value={item.numberOfBags}
+                        onChange={(e) => updateBagConversion(item.id, 'numberOfBags', cleanDecimalInput(e.target.value))}
+                        className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Weight per bag (kg)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Weight per bag for purchase item ${index + 1}`}
+                        value={item.weightPerBagKg}
+                        onChange={(e) => updateBagConversion(item.id, 'weightPerBagKg', cleanDecimalInput(e.target.value))}
+                        className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Weight per piece (g)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Weight per piece for purchase item ${index + 1}`}
+                        value={item.weightPerPieceGrams}
+                        onChange={(e) => updateBagConversion(item.id, 'weightPerPieceGrams', cleanDecimalInput(e.target.value))}
+                        className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total weight</div>
+                      <div className="text-sm font-bold text-slate-900 mt-0.5">
+                        {bagConversion && !('error' in bagConversion)
+                          ? `${(bagConversion.totalWeightGrams / 1000).toLocaleString('en-IN', { maximumFractionDigits: 2 })} kg`
+                          : '—'}
+                      </div>
+                      {bagConversion && !('error' in bagConversion) && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {bagConversion.totalWeightGrams.toLocaleString('en-IN')} g
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl bg-blue-50 px-3 py-2.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-blue-700">Calculated pieces</div>
+                      <div className="text-sm font-bold text-blue-800 mt-0.5">
+                        {bagConversion && !('error' in bagConversion)
+                          ? bagConversion.calculatedPieces.toLocaleString('en-IN')
+                          : '—'}
+                      </div>
+                      {bagConversion && 'error' in bagConversion && Number(item.numberOfBags) > 0 && (
+                        <div className="text-[10px] text-rose-600 mt-1">{bagConversion.error}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 </div>
               );
             })}

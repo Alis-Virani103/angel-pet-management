@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Customer, Order, CustomerStatus } from '../types';
 import { getCustomers, getOrders, updateCustomer } from '../services/db';
 import { Badge } from '../components/common/Badge';
+import { formatDate } from '../utils/dateUtils';
 import {
   ArrowLeft,
   Building,
@@ -239,7 +240,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ onOpenNewOrder
                           {order.orderType === 'AS' ? 'AS Order' : 'Regular'}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-slate-500">{order.orderDate}</td>
+                      <td className="py-3 px-3 text-slate-500">{formatDate(order.orderDate)}</td>
                       <td className="py-3 px-3">{order.items.map((i) => i.productName).join(', ')}</td>
                       <td className="py-3 px-3 font-bold text-slate-900">₹{order.totalAmount.toLocaleString()}</td>
                       <td className="py-3 px-3">

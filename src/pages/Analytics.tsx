@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Order, Product, Customer, Expense, Payment, OrderItem } from '../types';
 import { getOrders, getProducts, getCustomers, getExpenses, getPayments } from '../services/db';
+import { formatDate } from '../utils/dateUtils';
 import { StatCard } from '../components/common/StatCard';
 import {
   IndianRupee,
@@ -704,7 +705,7 @@ export const Analytics: React.FC = () => {
                 </div>
                 <div className="p-4 bg-slate-50 rounded-2xl">
                   <p className="text-xs text-slate-600">Last Order</p>
-                  <p className="text-lg font-bold text-slate-900">{selectedCustomer.lastOrderDate !== 'N/A' ? new Date(selectedCustomer.lastOrderDate).toLocaleDateString('en-IN') : 'N/A'}</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedCustomer.lastOrderDate !== 'N/A' ? formatDate(selectedCustomer.lastOrderDate) : 'N/A'}</p>
                 </div>
               </div>
 
@@ -787,7 +788,7 @@ export const Analytics: React.FC = () => {
 
                     <div className="p-4 bg-slate-50 rounded-2xl">
                       <p className="text-xs text-slate-600">Last Sale Date</p>
-                      <p className="text-lg font-bold text-slate-900">{productData.lastSaleDate ? new Date(productData.lastSaleDate).toLocaleDateString('en-IN') : 'N/A'}</p>
+                      <p className="text-lg font-bold text-slate-900">{productData.lastSaleDate ? formatDate(productData.lastSaleDate) : 'N/A'}</p>
                     </div>
 
                     {/* Product × Client Analysis */}

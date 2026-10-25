@@ -20,6 +20,7 @@ import { DispatchPage } from './pages/Dispatch';
 import { Documents } from './pages/Documents';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthorityPage } from './pages/AuthorityPage';
+import { GstExemptSales } from './pages/GstExemptSales';
 import { AdminRoute, PermissionRoute } from './auth/AuthContext';
 
 // Modals
@@ -288,6 +289,7 @@ export function App() {
           />
           <Route path="/settings" element={<AdminRoute><SettingsPage key={`set-${refreshKey}`} /></AdminRoute>} />
           <Route path="/settings/authority" element={<AdminRoute><AuthorityPage key={`authority-${refreshKey}`} /></AdminRoute>} />
+          <Route path="/gst-exempt-sales" element={<AdminRoute><GstExemptSales key={`gst-${refreshKey}`} onOpenRecordPaymentModal={(id) => openRecordPayment(id)} onOpenNewDispatchModal={(id) => openNewDispatch(id)} /></AdminRoute>} />
         </Route>
       </Routes>
 

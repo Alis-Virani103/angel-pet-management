@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dispatch, DispatchStatus, Order } from '../types';
 import { getDispatches, updateDispatchStatus, getOrders } from '../services/db';
 import { getOrderDeliveryProgress, OrderDeliveryProgress } from '../utils/dispatchUtils';
+import { formatDateDDMMYYYY } from '../utils/dateUtils';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import {
@@ -46,16 +47,6 @@ function numToWords(n: number): string {
   if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
   if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
   return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + numToWords(n % 10000000) : '');
-}
-
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'long', year: 'numeric'
-    });
-  } catch {
-    return dateStr;
-  }
 }
 
 // ── Inline styles for print challan ──────────────────────────────────────────
@@ -215,12 +206,6 @@ export const DispatchPage: React.FC<DispatchProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...S.headerCell, width: '55%' }}>
-                    <div style={S.brandBox}>
-                      <div style={S.brandTitle}>🐾 ANGEL PET</div>
-                    </div>
-                  </td>
-
                   <td style={{ ...S.headerCell, textAlign: 'right' }}>
                     <div style={S.challanBox}>
                       <div style={S.challanTitle}>SUB-DELIVERY CHALLAN</div>
@@ -236,7 +221,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                             <tr>
                               <td style={{ color: '#64748b' }}>Delivery Date</td>
                               <td style={{ fontWeight: '700', textAlign: 'right' }}>
-                                {formatDate(selectedDispatch.dispatchDate)}
+                                {formatDateDDMMYYYY(selectedDispatch.dispatchDate)}
                               </td>
                             </tr>
                             <tr>
@@ -288,12 +273,6 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                       <div style={S.infoLabel}>Order Reference</div>
                       <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
                         <tbody>
-                          <tr>
-                            <td style={{ color: '#475569', paddingBottom: '2px' }}>Order No:</td>
-                            <td style={{ fontWeight: '700', textAlign: 'right', color: '#1e3a8a' }}>
-                              {selectedDispatch.orderNumber}
-                            </td>
-                          </tr>
                           {linkedOrder?.orderType === 'AS' && (
                             <tr>
                               <td style={{ color: '#475569', paddingBottom: '2px' }}>Order Type:</td>
@@ -306,7 +285,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                             <tr>
                               <td style={{ color: '#475569' }}>Order Date:</td>
                               <td style={{ fontWeight: '600', textAlign: 'right' }}>
-                                {formatDate(linkedOrder.orderDate)}
+                                {formatDateDDMMYYYY(linkedOrder.orderDate)}
                               </td>
                             </tr>
                           )}
@@ -484,12 +463,6 @@ export const DispatchPage: React.FC<DispatchProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...S.headerCell, width: '55%' }}>
-                    <div style={S.brandBox}>
-                      <div style={S.brandTitle}>🐾 ANGEL PET</div>
-                    </div>
-                  </td>
-
                   <td style={{ ...S.headerCell, textAlign: 'right' }}>
                     <div style={{ ...S.challanBox, borderColor: '#16a34a', background: '#f0fdf4' }}>
                       <div style={{ ...S.challanTitle, color: '#166534' }}>FINAL CONSOLIDATED CHALLAN</div>
@@ -497,15 +470,9 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                         <table style={{ width: '100%', fontSize: '9.5px', borderCollapse: 'collapse' }}>
                           <tbody>
                             <tr>
-                              <td style={{ color: '#64748b', paddingBottom: '2px' }}>Order No.</td>
-                              <td style={{ fontWeight: '800', color: '#166534', textAlign: 'right' }}>
-                                {linkedOrder.orderNumber}
-                              </td>
-                            </tr>
-                            <tr>
-                              <td style={{ color: '#64748b' }}>Completion Date</td>
+                              <td style={{ color: '#64748b', paddingBottom: '2px' }}>Completion Date</td>
                               <td style={{ fontWeight: '700', textAlign: 'right' }}>
-                                {formatDate(new Date().toISOString().split('T')[0])}
+                                {formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}
                               </td>
                             </tr>
                             <tr>
@@ -630,7 +597,7 @@ export const DispatchPage: React.FC<DispatchProps> = ({
                         {sub.dispatchNumber}
                       </td>
                       <td style={{ padding: '6px 10px', borderBottom: '1px solid #e2e8f0', textAlign: 'center', color: '#475569' }}>
-                        {formatDate(sub.dispatchDate)}
+                        {formatDateDDMMYYYY(sub.dispatchDate)}
                       </td>
                       <td style={{ padding: '6px 10px', borderBottom: '1px solid #e2e8f0', color: '#0f172a', fontWeight: '600' }}>
                         {sub.vehicleNumber || 'N/A'}

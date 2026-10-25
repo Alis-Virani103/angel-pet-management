@@ -144,6 +144,7 @@ export const EditPurchaseItemsModal: React.FC<EditPurchaseItemsModalProps> = ({
       const material = materials.find((candidate) => candidate.id === item.rawMaterialId);
       const quantity = Number(item.quantity) || 0;
       const unitCost = Number(item.unitCost) || 0;
+      const previous = purchase.items.find((candidate) => candidate.rawMaterialId === item.rawMaterialId);
       return {
         rawMaterialId: item.rawMaterialId,
         rawMaterialName: material?.name || 'Unknown material',
@@ -153,7 +154,16 @@ export const EditPurchaseItemsModal: React.FC<EditPurchaseItemsModalProps> = ({
         unitCost,
         quantity,
         subtotal: quantity * unitCost,
-        taxRate: purchase.gstRate
+        taxRate: purchase.gstRate,
+        ...(previous?.numberOfBags && previous.weightPerBagKg && previous.weightPerPieceGrams
+          ? {
+              numberOfBags: previous.numberOfBags,
+              weightPerBagKg: previous.weightPerBagKg,
+              weightPerPieceGrams: previous.weightPerPieceGrams,
+              totalWeightGrams: previous.totalWeightGrams,
+              calculatedPieces: previous.calculatedPieces
+            }
+          : {})
       };
     });
 

@@ -9,6 +9,7 @@ import { getProductPriceForCategory, isValidProductPrice, getPreviousRatesForPro
 import { formatPackagingMode } from '../../utils/packagingUtils';
 import { printInvoice } from '../../utils/invoicePrintUtils';
 import { formatWeight, formatPieceWeight, calculateItemWeightGrams, calculateOrderTotalWeightGrams, getWeightInGrams } from '../../utils/weightUtils';
+import { calculateSalesTax } from '../../utils/gstUtils';
 
 interface NewOrderModalProps {
   isOpen: boolean;
@@ -370,9 +371,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     })
     .filter((item): item is OrderItem => item !== null);
 
-  const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const gstAmount = includeGst ? subtotal * 0.18 : 0;
-  const grandTotal = subtotal + gstAmount;
+  const subtotal = Number(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+  const configuredGstRate = settings?.gstRate ?? 18;
+  const { gstAmount, gstRate, totalAmount: grandTotal } = calculateSalesTax(subtotal, includeGst, configuredGstRate);
   const totalOrderWeightGrams = calculateOrderTotalWeightGrams(orderItems, products);
   const totalOrderWeightDisplay = formatWeight(totalOrderWeightGrams);
 
@@ -724,6 +725,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         }
       }
 
+      // Validate that tax values cannot become inconsistent with the selected GST status
+      if (!includeGst) {
+        if (gstAmount !== 0 || gstRate !== 0 || grandTotal !== subtotal) {
+          setError('Tax values cannot become inconsistent with GST-exempt status.');
+          setSubmittingMode(null);
+          isSubmittingRef.current = false;
+          return;
+        }
+      }
+
       const createdOrder = await addOrder({
         customerId: finalCustomerId,
         customerName: finalCustomerName,
@@ -731,7 +742,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         items: orderItems,
         subtotal,
         gstAmount,
-        gstRate: includeGst ? 18 : 0,
+        gstRate,
         gstApplied: includeGst,
         billType: includeGst ? 'pakka' : 'kachha',
         paymentType,
@@ -911,7 +922,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   aria-label={t('Search and select customer')}
                   aria-expanded={isCustomerSearchFocused}
                   aria-controls="customer-options-list"
-                  value={isCustomerSearchFocused ? customerSearch : (selectedCustomer ? `${selectedCustomer.name}${selectedCustomer.company ? ` — ${selectedCustomer.company}` : ''} — Tier ${selectedCustomer.priceCategory}` : '')}
+                  value={isCustomerSearchFocused ? customerSearch : (selectedCustomer ? selectedCustomer.name : '')}
                   placeholder={t('Search customer by name, company, phone, or tier...')}
                   onFocus={() => {
                     setIsCustomerSearchFocused(true);
@@ -952,18 +963,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           onClick={() => handleCustomerSelect(candidate)}
                           className={`w-full rounded-xl px-3.5 py-2.5 text-left text-xs transition-colors hover:bg-blue-50 ${isSelected ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-800'}`}
                         >
-                          <div className="flex items-center justify-between gap-2">
-                                            <span className="font-bold text-slate-900">
-                                              {candidate.name}{candidate.company ? ` — ${candidate.company}` : ''} — Tier {candidate.priceCategory}
-                            </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-blue-100 text-blue-700 shrink-0">
-                              Tier {candidate.priceCategory}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-slate-500">
-                            <span>{candidate.company || '—'}</span>
-                            <span>{candidate.phone || '—'}</span>
-                          </div>
+                          <span className="font-bold text-slate-900">{candidate.name}</span>
                         </button>
                       );
                     })
@@ -1527,7 +1527,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           </label>
                           <select
                             value={item.selectedInnerId || ''}
-                            onChange={(e) => updateItem(item.id, { selectedInnerId: e.target.value })}
+                            onChange={(e) => {
+                              const newInnerId = e.target.value;
+                              const newIsCombo = Boolean(newInnerId || item.selectedCapId);
+                              updateItem(item.id, { selectedInnerId: newInnerId, isCombo: newIsCombo });
+                            }}
                             className="w-full h-8 px-2.5 bg-white text-xs font-semibold text-slate-800 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
                           >
                             <option value="">None (Bottle Only)</option>
@@ -1547,7 +1551,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           </label>
                           <select
                             value={item.selectedCapId || ''}
-                            onChange={(e) => updateItem(item.id, { selectedCapId: e.target.value })}
+                            onChange={(e) => {
+                              const newCapId = e.target.value;
+                              const newIsCombo = Boolean(item.selectedInnerId || newCapId);
+                              updateItem(item.id, { selectedCapId: newCapId, isCombo: newIsCombo });
+                            }}
                             className="w-full h-8 px-2.5 bg-white text-xs font-semibold text-slate-800 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
                           >
                             <option value="">None (Bottle Only)</option>
@@ -1920,7 +1928,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                 onChange={(e) => setIncludeGst(e.target.checked)}
                 className="rounded text-blue-500 focus:ring-0"
               />
-              <span>{t('Apply GST (18%)')}</span>
+              <span>{includeGst ? t(`Apply GST (${configuredGstRate}%)`) : t('Apply GST')}</span>
+              {!includeGst && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {t('GST-Exempt (Kachha Bill)')}
+                </span>
+              )}
             </label>
             <span className="text-xs text-slate-400">
               ₹{gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

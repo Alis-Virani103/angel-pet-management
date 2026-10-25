@@ -7,6 +7,7 @@ import { calculatePacketUnits, getProductUnitsPerPacket, isPositiveInteger, pars
 import { getProductPriceForCategory, isValidProductPrice, calculateEffectiveItemRate, getBottleComboPrice } from '../../utils/pricingUtils';
 import { formatPackagingMode } from '../../utils/packagingUtils';
 import { formatWeight, formatPieceWeight, calculateItemWeightGrams, calculateOrderTotalWeightGrams } from '../../utils/weightUtils';
+import { calculateSalesTax, isOrderGstApplied } from '../../utils/gstUtils';
 
 interface EditOrderItemsModalProps {
   isOpen: boolean;
@@ -100,6 +101,7 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [notes, setNotes] = useState(order.notes || '');
+  const [includeGst, setIncludeGst] = useState<boolean>(isOrderGstApplied(order));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -108,6 +110,7 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
     const defaultCat = order.items[0]?.priceCategory || 'A';
     setItems(order.items.map((it) => createDraftItem(it, defaultCat)));
     setNotes(order.notes || '');
+    setIncludeGst(isOrderGstApplied(order));
     setError('');
     getProducts().then(setProducts).catch(() => setError('Unable to load products.'));
   }, [isOpen, order]);
@@ -243,9 +246,9 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
   });
 
   const orderItems = getOrderItems();
-  const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const gstAmount = order.gstRate > 0 ? subtotal * (order.gstRate / 100) : 0;
-  const grandTotal = subtotal + gstAmount;
+  const subtotal = Number(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+  const configuredGstRate = order.gstRate > 0 ? order.gstRate : 18;
+  const { gstAmount, gstRate, totalAmount: grandTotal } = calculateSalesTax(subtotal, includeGst, configuredGstRate);
   const totalOrderWeightGrams = calculateOrderTotalWeightGrams(orderItems, products);
   const totalOrderWeightDisplay = formatWeight(totalOrderWeightGrams);
 
@@ -300,12 +303,23 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
       return;
     }
 
+    // Validate that tax values cannot become inconsistent with the selected GST status
+    if (!includeGst) {
+      if (gstAmount !== 0 || gstRate !== 0 || grandTotal !== subtotal) {
+        setError('Tax values cannot become inconsistent with GST-exempt status.');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const updatedOrder = await updateOrder(order.id, {
         items: orderItems,
         subtotal,
         gstAmount,
+        gstRate,
+        gstApplied: includeGst,
+        billType: includeGst ? 'pakka' : 'kachha',
         totalAmount: grandTotal,
         totalQuantity: orderItems.reduce((sum, item) => sum + item.quantity, 0),
         totalWeightGrams: totalOrderWeightGrams ?? undefined,
@@ -665,9 +679,35 @@ export const EditOrderItemsModal: React.FC<EditOrderItemsModalProps> = ({
         </div>
 
         <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2 text-xs">
-          <div className="flex justify-between text-slate-400"><span>Subtotal:</span><span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between text-slate-400"><span>GST ({order.gstRate}%):</span><span>₹{gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-800"><span>Grand Total:</span><span className="text-blue-400">₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between text-slate-400">
+            <span>Subtotal:</span>
+            <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeGst}
+                onChange={(e) => setIncludeGst(e.target.checked)}
+                className="rounded text-blue-500 focus:ring-0"
+              />
+              <span>{includeGst ? `Apply GST (${configuredGstRate}%)` : 'Apply GST'}</span>
+              {!includeGst && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  GST-Exempt (Kachha Bill)
+                </span>
+              )}
+            </label>
+            <span className="text-xs text-slate-400">
+              ₹{gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-800">
+            <span>Grand Total:</span>
+            <span className="text-blue-400">₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
           {totalOrderWeightGrams !== null && totalOrderWeightGrams > 0 && (
             <div className="flex justify-between text-xs text-slate-300 font-medium pt-2 border-t border-slate-800">
               <span>Total Order Weight:</span>

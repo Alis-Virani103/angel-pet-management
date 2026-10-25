@@ -1,7 +1,8 @@
 import { Order, OrderItem, Customer, Settings, Product } from '../types';
 import { formatPackagingMode } from './packagingUtils';
-import { formatWeight, getWeightInGrams } from './weightUtils';
+import { formatWeight, getWeightInGrams, calculateItemWeightGrams } from './weightUtils';
 import { formatNumberDisplay } from './packetUtils';
+import { isOrderGstApplied } from './gstUtils';
 
 // ── Number-to-words helper (Indian numbering) ─────────────────────────────────
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
@@ -30,11 +31,11 @@ export function amountInWords(amount: number): string {
 
 export function formatInvoiceDate(dateStr: string): string {
   try {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric'
-    });
+    const date = new Date(dateStr + 'T00:00:00');
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
   } catch {
     return dateStr;
   }
@@ -42,15 +43,10 @@ export function formatInvoiceDate(dateStr: string): string {
 
 /**
  * Returns true if the order represents a Pakka Bill (Tax Invoice with GST applied),
- * or false if it represents a non-GST Kachha Bill.
+ * or false if it represents a non-GST Kachha Bill / GST-exempt sale.
  */
 export function isPakkaBill(order: Order): boolean {
-  if (typeof order.gstApplied === 'boolean') {
-    return order.gstApplied;
-  }
-  if (order.billType === 'pakka') return true;
-  if (order.billType === 'kachha') return false;
-  return (order.gstRate ?? 0) > 0 && (order.gstAmount ?? 0) > 0;
+  return isOrderGstApplied(order);
 }
 
 export interface ExpandedInvoiceItem {
@@ -138,14 +134,34 @@ export function expandComboItems(
       const bottleWeightGrams = bottlePieceGrams > 0 ? bottlePieceGrams * item.quantity : null;
       const bottleWeightDisplay = bottleWeightGrams ? formatWeight(bottleWeightGrams) : undefined;
 
+      // Calculate combined weight for the main bottle row (Bottle + Inner + Cap)
+      const innerProduct = hasInner ? products?.find(
+        (p) =>
+          (item.selectedInnerId && p.id === item.selectedInnerId) ||
+          (item.selectedInnerName && p.name === item.selectedInnerName)
+      ) : null;
+      const capProduct = hasCap ? products?.find(
+        (p) =>
+          (item.selectedCapId && p.id === item.selectedCapId) ||
+          (item.selectedCapName && p.name === item.selectedCapName)
+      ) : null;
+
+      const combinedWeightGrams = calculateItemWeightGrams({
+        product: bottleProduct,
+        quantity: item.quantity,
+        innerProduct,
+        capProduct
+      });
+      const combinedWeightDisplay = combinedWeightGrams ? formatWeight(combinedWeightGrams) : undefined;
+
       const mainBottleItem: OrderItem = {
         ...item,
         productName: bottleProduct?.name || item.productName,
         productType: bottleProduct?.type || item.productType || 'bottle',
         weightPerPiece: bottleWeightPerPiece,
         weightUnit: bottleWeightUnit,
-        totalWeightGrams: bottleWeightGrams ?? undefined,
-        totalWeightDisplay: bottleWeightDisplay
+        totalWeightGrams: combinedWeightGrams ?? undefined,
+        totalWeightDisplay: combinedWeightDisplay
       };
 
       expandedItems.push({
@@ -156,8 +172,8 @@ export function expandComboItems(
         isMain: true,
         isComponent: false,
         displayTitle: mainBottleItem.productName,
-        weightGrams: bottleWeightGrams,
-        weightDisplay: bottleWeightDisplay
+        weightGrams: combinedWeightGrams,
+        weightDisplay: combinedWeightDisplay
       });
 
       // 2. Inner component line (if present)
@@ -196,8 +212,8 @@ export function expandComboItems(
           isComponent: true,
           componentType: 'inner',
           displayTitle: innerName,
-          weightGrams: innerWeightGrams,
-          weightDisplay: innerWeightDisplay
+          weightGrams: null, // Don't count component weight in total (already in main bottle row)
+          weightDisplay: innerWeightDisplay // Still display individual component weight for reference
         });
       }
 
@@ -237,8 +253,8 @@ export function expandComboItems(
           isComponent: true,
           componentType: 'cap',
           displayTitle: capName,
-          weightGrams: capWeightGrams,
-          weightDisplay: capWeightDisplay
+          weightGrams: null, // Don't count component weight in total (already in main bottle row)
+          weightDisplay: capWeightDisplay // Still display individual component weight for reference
         });
       }
     }

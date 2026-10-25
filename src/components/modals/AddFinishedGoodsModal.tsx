@@ -9,41 +9,21 @@ import {
 } from '../../services/db';
 import {
   calculateEquivalentPieces,
-  calculatePiecesFromWeight,
   formatQuantityWithUnit,
   fromBaseQuantity,
   getStockInBothUnits,
   toBaseQuantity
 } from '../../utils/unitConversion';
 import { calculateNetProductionQuantity } from '../../utils/productionUtils';
-import { AlertCircle, Boxes } from 'lucide-react';
+import { addCustomProductType, getAllProductTypes, normalizeProductType } from '../../utils/productTypeUtils';
+import { formatDateForDisplay, formatDateForInput, parseProductionDate } from '../../utils/dateUtils';
+import { AlertCircle, Boxes, Plus, Calendar } from 'lucide-react';
 
 interface AddFinishedGoodsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStockAdded?: () => void;
 }
-
-const parseProductionDate = (value: string): string | null => {
-  const match = /^(\d{2}) (\d{2}) (\d{4})$/.exec(value);
-  if (!match) return null;
-
-  const [, dayText, monthText, yearText] = match;
-  const day = Number(dayText);
-  const month = Number(monthText);
-  const year = Number(yearText);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (
-    year < 1 ||
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return `${yearText}-${monthText}-${dayText}`;
-};
 
 export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   isOpen,
@@ -53,13 +33,12 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [productType, setProductType] = useState<ProductType>('bottle');
+  const [customProductType, setCustomProductType] = useState('');
+  const [isCustomType, setIsCustomType] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [quantityProduced, setQuantityProduced] = useState('');
   const [materialUnit, setMaterialUnit] = useState('');
-  const [numberOfBags, setNumberOfBags] = useState('');
-  const [weightPerBagKg, setWeightPerBagKg] = useState('');
-  const [weightPerPieceGrams, setWeightPerPieceGrams] = useState('');
   const [wastage1, setWastage1] = useState('');
   const [wastage2, setWastage2] = useState('');
   const [date, setDate] = useState('');
@@ -68,16 +47,19 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const [error, setError] = useState('');
   const submissionInProgress = useRef(false);
 
+  // Get all available product types (standard + custom + from products)
+  const availableProductTypes = getAllProductTypes(products);
+
   useEffect(() => {
     if (isOpen) {
       setQuantityProduced('');
-      setNumberOfBags('');
-      setWeightPerBagKg('');
-      setWeightPerPieceGrams('');
       setWastage1('');
       setWastage2('');
       setDate('');
       setNotes('');
+      setCustomProductType('');
+      setIsCustomType(false);
+      setProductType('bottle');
       loadData();
     }
   }, [isOpen]);
@@ -102,8 +84,21 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
 
   const handleTypeChange = (type: ProductType) => {
     setProductType(type);
+    setIsCustomType(false);
+    setCustomProductType('');
     const filtered = products.filter((product) => product.type === type);
     setSelectedProductId(filtered[0]?.id || '');
+  };
+
+  const handleCustomTypeChange = (value: string) => {
+    setCustomProductType(value);
+    setIsCustomType(value !== 'bottle' && value !== 'cap' && value !== 'inner');
+    if (value) {
+      const normalizedType = normalizeProductType(value);
+      setProductType(normalizedType);
+      const filtered = products.filter((product) => product.type === normalizedType);
+      setSelectedProductId(filtered[0]?.id || '');
+    }
   };
 
   const handleMaterialChange = (materialId: string) => {
@@ -118,46 +113,23 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const selectedProduct = products.find((product) => product.id === selectedProductId);
   const selectedMaterial = materials.find((material) => material.id === selectedMaterialId);
   const materialStock = selectedMaterial ? getStockInBothUnits(selectedMaterial) : null;
-  const weightCalculation = calculatePiecesFromWeight({
-    numberOfBags: Number(numberOfBags) || undefined,
-    weightPerBagKg: Number(weightPerBagKg) || undefined,
-    weightPerPieceGrams: Number(weightPerPieceGrams) || undefined
-  });
-  const totalWeightKg = weightCalculation.totalWeightKg || 0;
-  const totalMaterialQuantityKg = totalWeightKg;
+  const parsedQuantityProduced = Number(quantityProduced) || 0;
   const wastage1Number = Number(wastage1) || 0;
   const wastage2Number = Number(wastage2) || 0;
-  // Wastage is now piece counts, not kg - do not subtract from raw material kg
-  const netMaterialQuantityKg = totalMaterialQuantityKg;
-  const toMaterialBaseQuantity = (quantityKg: number) => {
-    if (!selectedMaterial) return 0;
-    const baseUnit = (selectedMaterial.baseUnit || selectedMaterial.unit).toLowerCase();
-    if (baseUnit === 'kg') return quantityKg;
-    if (baseUnit === 'g') return quantityKg * 1000;
-    if (baseUnit === 'pcs' && Number(weightPerPieceGrams) > 0) {
-      return quantityKg * 1000 / Number(weightPerPieceGrams);
-    }
-    return toBaseQuantity(quantityKg, 'kg', selectedMaterial);
-  };
-  const totalMaterialBaseQuantity = selectedMaterial && totalMaterialQuantityKg > 0
-    ? toMaterialBaseQuantity(totalMaterialQuantityKg)
-    : 0;
-  const netMaterialBaseQuantity = selectedMaterial && netMaterialQuantityKg > 0
-    ? toMaterialBaseQuantity(netMaterialQuantityKg)
-    : 0;
-  const totalMaterialQuantity = selectedMaterial
-    ? fromBaseQuantity(totalMaterialBaseQuantity, materialUnit, selectedMaterial)
-    : 0;
-  const netMaterialQuantity = selectedMaterial
-    ? fromBaseQuantity(netMaterialBaseQuantity, materialUnit, selectedMaterial)
-    : 0;
-  // Wastage is now piece counts, not kg - save as pieces in 'pcs' unit
+  // Wastage is piece counts
   const wastage1Quantity = wastage1Number;
   const wastage2Quantity = wastage2Number;
-  const equivalentPieces = selectedMaterial && netMaterialQuantityKg > 0
-    ? weightCalculation.isValid && weightCalculation.pieces !== null && totalWeightKg > 0
-      ? weightCalculation.pieces * (netMaterialQuantityKg / totalWeightKg)
-      : calculateEquivalentPieces(netMaterialBaseQuantity, selectedMaterial)
+  // Calculate net production pieces
+  const netPieces = parsedQuantityProduced - wastage1Number - wastage2Number;
+  // Convert quantity to material's base unit for stock deduction
+  const materialBaseQuantity = selectedMaterial && parsedQuantityProduced > 0
+    ? toBaseQuantity(parsedQuantityProduced, selectedProduct?.unit || 'pcs', selectedMaterial)
+    : 0;
+  const materialQuantity = selectedMaterial
+    ? fromBaseQuantity(materialBaseQuantity, materialUnit, selectedMaterial)
+    : 0;
+  const equivalentPieces = selectedMaterial && materialBaseQuantity > 0
+    ? calculateEquivalentPieces(materialBaseQuantity, selectedMaterial)
     : undefined;
 
   const getMaterialUnits = (material: RawMaterial) =>
@@ -168,12 +140,21 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
     if (submissionInProgress.current) return;
     const productionDate = parseProductionDate(date);
     if (!productionDate) {
-      setError('Enter a valid production date in DD MM YYYY format.');
+      setError('Enter a valid production date in DD-MM-YYYY format.');
+      return;
+    }
+    if (isCustomType && !customProductType.trim()) {
+      setError('Please enter a valid product type.');
       return;
     }
     if (!selectedProduct) {
       setError('Please select a product.');
       return;
+    }
+
+    // Save custom product type to localStorage if it's new
+    if (isCustomType && customProductType.trim()) {
+      addCustomProductType(customProductType.trim());
     }
     const parsedQuantity = Number(quantityProduced);
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
@@ -182,10 +163,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
     }
     if (!selectedMaterial) {
       setError('Please select the raw material used for this production.');
-      return;
-    }
-    if (!Number.isFinite(totalMaterialQuantityKg) || totalMaterialQuantityKg <= 0) {
-      setError('Raw-material quantity must be greater than 0.');
       return;
     }
     if (wastage1Number < 0 || wastage2Number < 0) {
@@ -200,8 +177,12 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       setError('Wastage 2 must be a whole number (pieces).');
       return;
     }
-    // Wastage is now separate from raw material consumption, so no need to check netMaterialQuantityKg
-    if (totalMaterialBaseQuantity > selectedMaterial.currentStock) {
+    // Validate that net pieces is not negative
+    if (netPieces < 0) {
+      setError(`Wastage (${wastage1Number + wastage2Number} pieces) cannot exceed total production (${parsedQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pieces).`);
+      return;
+    }
+    if (materialBaseQuantity > selectedMaterial.currentStock) {
       setError(`Insufficient stock. Available: ${formatQuantityWithUnit(materialStock?.baseQuantity, materialStock?.baseUnit)}.`);
       return;
     }
@@ -214,14 +195,14 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       await recordRawMaterialUsage({
         materialId: selectedMaterial.id,
         materialName: selectedMaterial.name,
-        quantity: netMaterialQuantity,
+        quantity: materialQuantity,
         unit: materialUnit,
         wastage1: wastage1Quantity > 0 ? wastage1Quantity : undefined,
         wastage2: wastage2Quantity > 0 ? wastage2Quantity : undefined,
-        baseQuantity: netMaterialBaseQuantity,
+        baseQuantity: materialBaseQuantity,
         baseUnit: selectedMaterial.baseUnit,
         equivalentPieces: equivalentPieces || undefined,
-        totalDeduction: totalMaterialQuantity,
+        totalDeduction: materialQuantity,
         date: productionDate,
         productionBatch: batch,
         notes: `Consumed for ${selectedProduct.name} production. Wastage: ${wastage1Quantity + wastage2Quantity} pieces`
@@ -268,10 +249,42 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="form-label">Product Type</label>
-            <select value={productType} onChange={(e) => handleTypeChange(e.target.value as ProductType)} className="form-select">
-              <option value="bottle">Bottles</option>
-              <option value="cap">Caps</option>
+            <select
+              value={isCustomType ? 'custom' : productType}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  setIsCustomType(true);
+                  setCustomProductType('');
+                } else {
+                  handleTypeChange(e.target.value as ProductType);
+                }
+              }}
+              className="form-select"
+            >
+              {availableProductTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()}
+                </option>
+              ))}
+              <option value="custom">+ Add New Type...</option>
             </select>
+            {isCustomType && (
+              <input
+                type="text"
+                value={customProductType}
+                onChange={(e) => handleCustomTypeChange(e.target.value)}
+                onBlur={(e) => {
+                  const normalized = normalizeProductType(e.target.value);
+                  if (normalized) {
+                    setCustomProductType(normalized);
+                    setProductType(normalized);
+                  }
+                }}
+                placeholder="Enter new product type (e.g., Sprayers)"
+                className="form-input mt-2"
+                required
+              />
+            )}
           </div>
           <div>
             <label className="form-label">Select Manufactured Product</label>
@@ -298,18 +311,17 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
             <input type="number" min={1} required placeholder="Enter quantity produced" value={quantityProduced} onChange={(e) => setQuantityProduced(e.target.value)} className="form-input font-bold" />
           </div>
           <div>
-            <label className="form-label">Production Date (DD MM YYYY)</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]{2} [0-9]{2} [0-9]{4}"
-              maxLength={10}
-              required
-              placeholder="DD MM YYYY"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="form-input"
-            />
+            <label className="form-label">Production Date (DD-MM-YYYY)</label>
+            <div className="relative">
+              <input
+                type="date"
+                required
+                value={formatDateForInput(date)}
+                onChange={(e) => setDate(formatDateForDisplay(e.target.value))}
+                className="form-input pr-10"
+              />
+              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -331,39 +343,12 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="form-label">Number of Bags</label>
-            <input type="number" min={0.01} step="0.01" required value={numberOfBags} onChange={(e) => setNumberOfBags(e.target.value)} className="form-input font-bold" placeholder="e.g. 8" />
-          </div>
-          <div>
-            <label className="form-label">Weight per Bag (kg)</label>
-            <input type="number" min={0.01} step="0.01" required value={weightPerBagKg} onChange={(e) => setWeightPerBagKg(e.target.value)} className="form-input font-bold" placeholder="e.g. 25" />
-          </div>
+        <div>
+          <label className="form-label">Consumption Unit</label>
+          <select value={materialUnit} onChange={(e) => setMaterialUnit(e.target.value)} className="form-select">
+            {selectedMaterial && getMaterialUnits(selectedMaterial).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+          </select>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="form-label">Weight per Piece (grams)</label>
-            <input type="number" min={0.01} step="0.01" required value={weightPerPieceGrams} onChange={(e) => setWeightPerPieceGrams(e.target.value)} className="form-input font-bold" placeholder="e.g. 10" />
-          </div>
-          <div>
-            <label className="form-label">Consumption Unit</label>
-            <select value={materialUnit} onChange={(e) => setMaterialUnit(e.target.value)} className="form-select">
-              {selectedMaterial && getMaterialUnits(selectedMaterial).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {weightCalculation.isValid && weightCalculation.totalWeightKg !== null && (
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-900 flex flex-wrap gap-4">
-            <span>Total weight: <strong>{weightCalculation.totalWeightKg.toLocaleString('en-IN', { maximumFractionDigits: 2 })} kg</strong></span>
-            <span>Net calculation: <strong>{(netMaterialQuantityKg * 1000).toLocaleString('en-IN')} g ÷ {Number(weightPerPieceGrams).toLocaleString('en-IN')} g</strong></span>
-            {equivalentPieces !== undefined && equivalentPieces > 0 && (
-              <span>Equivalent pieces: <strong>{equivalentPieces.toLocaleString('en-IN', { maximumFractionDigits: 2 })} pcs</strong></span>
-            )}
-          </div>
-        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -376,14 +361,14 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           </div>
         </div>
 
-        {selectedMaterial && totalMaterialQuantityKg > 0 && (
+        {selectedMaterial && parsedQuantityProduced > 0 && (
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex flex-wrap gap-4">
             <span>
               Net quantity calculation: <strong>
-                {formatQuantityWithUnit(totalMaterialQuantityKg, 'kg')} - {formatQuantityWithUnit(wastage1Number, 'kg')} - {formatQuantityWithUnit(wastage2Number, 'kg')} = {formatQuantityWithUnit(netMaterialQuantityKg, 'kg')}
+                {parsedQuantityProduced.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pcs - {wastage1Number.toLocaleString('en-IN')} pcs - {wastage2Number.toLocaleString('en-IN')} pcs = {netPieces.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pcs
               </strong>
             </span>
-            <span>Stock deduction: <strong>{formatQuantityWithUnit(totalMaterialBaseQuantity, selectedMaterial.baseUnit)}</strong></span>
+            <span>Stock deduction: <strong>{formatQuantityWithUnit(materialBaseQuantity, selectedMaterial.baseUnit)}</strong></span>
             {equivalentPieces !== undefined && equivalentPieces > 0 && (
               <span>Equivalent pieces: <strong>{formatQuantityWithUnit(equivalentPieces, 'pcs')}</strong></span>
             )}

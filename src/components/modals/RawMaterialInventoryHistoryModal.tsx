@@ -3,6 +3,7 @@ import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialUsage, PurchaseOrder } from '../../types';
 import { formatQuantityWithUnit, getStockInBothUnits, calculateEquivalentPieces } from '../../utils/unitConversion';
 import { Clock, TrendingUp, TrendingDown, Package, ShoppingCart } from 'lucide-react';
+import { formatDate } from '../../utils/dateUtils';
 
 interface RawMaterialInventoryHistoryModalProps {
   isOpen: boolean;
@@ -78,11 +79,7 @@ export const RawMaterialInventoryHistoryModal: React.FC<RawMaterialInventoryHist
   });
 
   const formatDateTime = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    const day = date.getDate();
-    const month = date.toLocaleString('en-US', { month: 'short' });
-    const year = date.getFullYear();
-    return `${day} ${month} ${year}`;
+    return formatDate(dateStr);
   };
 
   return (

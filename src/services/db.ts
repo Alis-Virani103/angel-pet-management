@@ -97,7 +97,8 @@ import type {
   , PermissionAction
 } from '../types';
 import { getOrderDeliveryProgress, generateNextChallanNumber } from '../utils/dispatchUtils';
-import { toBaseQuantity } from '../utils/unitConversion';
+import { getReceivedPurchaseBaseQuantity, toBaseQuantity } from '../utils/unitConversion';
+import { isGstExemptOrder } from '../utils/gstUtils';
 
 const initialCustomers: Customer[] = [];
 const initialProducts: Product[] = [];
@@ -582,14 +583,42 @@ export async function getOrders(): Promise<Order[]> {
   return items;
 }
 
+/**
+ * Returns only explicitly GST-exempt orders (gstApplied === false or billType === 'kachha').
+ * Requires admin-level access enforced by checking the Firebase custom claim server-side.
+ * Legacy orders without these fields are never classified as exempt.
+ */
+export async function getGstExemptOrders(): Promise<Order[]> {
+  const user = auth?.currentUser;
+  if (!user) throw new Error('You must be signed in to access GST-exempt records.');
+  const token = await user.getIdTokenResult();
+  if (token.claims.admin !== true) {
+    throw new Error('Administrator access required to view GST-exempt records.');
+  }
+  const allOrders = dedupeById(await getCloudItems<Order>('orders'));
+  return allOrders.filter(isGstExemptOrder);
+}
+
 export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'paidAmount' | 'paymentStatus' | 'orderStatus' | 'orderDate'>): Promise<Order> {
   await requirePermission('salesOrders', 'create');
   const randomNum = Math.floor(10000 + Math.random() * 90000);
   const orderNumber = `ORD-${randomNum}`;
   const orderType = orderData.orderType || 'REGULAR';
   const isAS = orderType === 'AS';
+
+  // Enforce tax consistency based on GST status
+  const isExplicitExempt = orderData.gstApplied === false || orderData.billType === 'kachha';
+  const gstApplied = orderData.gstApplied !== undefined
+    ? orderData.gstApplied
+    : (orderData.billType === 'pakka' ? true : !isExplicitExempt);
+
+  const gstAmount = gstApplied ? Number((orderData.gstAmount || 0).toFixed(2)) : 0;
+  const gstRate = gstApplied ? (orderData.gstRate > 0 ? orderData.gstRate : 18) : 0;
+  const billType: 'kachha' | 'pakka' = gstApplied ? (orderData.billType || 'pakka') : 'kachha';
+  const totalAmount = gstApplied ? Number((orderData.subtotal + gstAmount).toFixed(2)) : Number(orderData.subtotal.toFixed(2));
+
   const isCashMemo = !isAS && orderData.paymentType === 'cash_memo';
-  if (isCashMemo && orderData.totalAmount > 0) {
+  if (isCashMemo && totalAmount > 0) {
     await requirePermission('finance', 'create');
   }
   const orderDate = new Date().toISOString().split('T')[0];
@@ -601,9 +630,15 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
     orderNumber,
     orderStatus: 'pending',
     paymentStatus: isAS ? 'paid' : (isCashMemo ? 'paid' : 'pending'),
-    paidAmount: isAS ? 0 : (isCashMemo ? orderData.totalAmount : 0),
+    paidAmount: isAS ? 0 : (isCashMemo ? totalAmount : 0),
     paymentType: isAS ? undefined : (orderData.paymentType || 'debit_memo'),
-    orderDate
+    orderDate,
+    gstApplied,
+    billType,
+    gstRate,
+    gstAmount,
+    totalAmount,
+    createdAt: new Date().toISOString()
   };
 
   const list = getLocalItem<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
@@ -673,7 +708,30 @@ export async function updateOrder(id: string, updates: Partial<Order>): Promise<
   const newList = list.map((item) => {
     if (item.id === id) {
       found = true;
-      updated = { ...item, ...updates };
+      const merged: Order = { ...item, ...updates };
+
+      // Maintain GST consistency if gstApplied is explicitly updated
+      if (typeof updates.gstApplied === 'boolean') {
+        if (!updates.gstApplied) {
+          merged.gstApplied = false;
+          merged.gstAmount = 0;
+          merged.gstRate = 0;
+          merged.billType = 'kachha';
+          merged.totalAmount = Number(merged.subtotal.toFixed(2));
+        } else {
+          merged.gstApplied = true;
+          merged.billType = 'pakka';
+          if (!merged.gstRate || merged.gstRate === 0) {
+            merged.gstRate = 18;
+          }
+          if (typeof updates.gstAmount !== 'number') {
+            merged.gstAmount = Number((merged.subtotal * (merged.gstRate / 100)).toFixed(2));
+          }
+          merged.totalAmount = Number((merged.subtotal + merged.gstAmount).toFixed(2));
+        }
+      }
+
+      updated = merged;
       return updated;
     }
     return item;
@@ -1665,7 +1723,7 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
     if (material) {
       // Inventory is stored in base units, while purchase lines may use bags,
       // packets, cartons, or pieces.
-      const quantityToAdd = toBaseQuantity(item.quantity, item.unit, material);
+      const quantityToAdd = getReceivedPurchaseBaseQuantity(item, material);
       
       const previousAddition = additionsByMaterial.get(material.id) || 0;
       const totalAddition = previousAddition + quantityToAdd;
@@ -1678,23 +1736,42 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
       });
       additionsByMaterial.set(material.id, totalAddition);
     } else if (item.rawMaterialName) {
+      const inferredBaseUnit = item.unit || 'kg';
+      const inferredMaterial: RawMaterial = {
+        id: '',
+        name: item.rawMaterialName,
+        code: item.hsnSac || '',
+        category: item.category || 'granules',
+        currentStock: 0,
+        minimumStock: 0,
+        unit: inferredBaseUnit,
+        baseUnit: inferredBaseUnit,
+        purchaseUnit: inferredBaseUnit,
+        consumptionUnit: inferredBaseUnit,
+        conversionFactor: 1,
+        unitCost: item.unitCost || 0,
+        supplier: purchase.supplierName || '',
+        status: 'healthy',
+        lastRestocked: ''
+      };
+      const stockQty = getReceivedPurchaseBaseQuantity(item, inferredMaterial);
       const newMat = await addRawMaterial({
         name: item.rawMaterialName.trim(),
         code: item.hsnSac || `MAT-${Math.floor(1000 + Math.random() * 9000)}`,
         category: item.category || 'granules',
-        currentStock: item.quantity,
+        currentStock: stockQty,
         minimumStock: 500,
-        unit: item.unit || 'kg',
-        baseUnit: item.unit || 'kg',
-        purchaseUnit: item.unit || 'kg',
-        consumptionUnit: item.unit || 'kg',
+        unit: inferredBaseUnit,
+        baseUnit: inferredBaseUnit,
+        purchaseUnit: inferredBaseUnit,
+        consumptionUnit: inferredBaseUnit,
         conversionFactor: 1,
         piecesPerBaseUnit: undefined,
         unitCost: item.unitCost || 0,
         supplier: purchase.supplierName || ''
       });
       materials.push(newMat);
-      additionsByMaterial.set(newMat.id, item.quantity);
+      additionsByMaterial.set(newMat.id, stockQty);
     }
   }
 

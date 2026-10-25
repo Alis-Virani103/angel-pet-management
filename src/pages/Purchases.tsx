@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PurchaseOrder, PurchaseStatus, PurchasePaymentStatus, RawMaterialCategory } from '../types';
 import { getPurchases, updatePurchaseStatus, deletePurchase } from '../services/db';
 import { Badge } from '../components/common/Badge';
+import { formatDate } from '../utils/dateUtils';
 import {
   Search,
   Plus,
@@ -276,7 +277,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
                           {po.purchaseNumber}
                         </Link>
                       </td>
-                      <td className="py-3.5 px-4 text-slate-500">{po.purchaseDate}</td>
+                      <td className="py-3.5 px-4 text-slate-500">{formatDate(po.purchaseDate)}</td>
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-900 flex items-center gap-1">
                           <Building2 className="w-3.5 h-3.5 text-slate-400" />

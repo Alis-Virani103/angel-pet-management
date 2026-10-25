@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Dispatch, Order, OrderStatus, PaymentStatus, PriceCategory } from '../types';
-import { getDispatches, getOrders, updateOrderStatus } from '../services/db';
+import { Dispatch, Order, PaymentStatus, PriceCategory } from '../types';
+import { getDispatches, getOrders } from '../services/db';
 import { getOrderQuantity } from '../utils/orderUtils';
 import { getOrderDeliveryProgress } from '../utils/dispatchUtils';
 import { formatNumberDisplay } from '../utils/packetUtils';
+import { isRegularOrder, isWithin24HourVisibilityWindow, isGstExemptOrder } from '../utils/gstUtils';
+import { formatDate } from '../utils/dateUtils';
 import { Badge } from '../components/common/Badge';
 import {
   Search,
@@ -12,11 +14,10 @@ import {
   Eye,
   IndianRupee,
   Truck,
-  CheckCircle2,
-  XCircle,
   Building2,
   Printer,
-  X
+  X,
+  Info
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
@@ -67,15 +68,6 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
-    try {
-      await updateOrderStatus(orderId, newStatus);
-      loadOrders();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const handleViewChallan = (order: Order) => {
     const orderDispatches = dispatches
       .filter((dispatch) => dispatch.orderId === order.id || dispatch.orderNumber === order.orderNumber)
@@ -92,11 +84,14 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const printProgress = printOrder ? getOrderDeliveryProgress(printOrder, dispatches) : null;
 
-  // Unique customer list for dropdown
-  const customerNames = Array.from(new Set(orders.map((o) => o.companyName || o.customerName)));
+  // Unique customer list for dropdown (only regular orders)
+  const customerNames = Array.from(new Set(orders.filter(isRegularOrder).map((o) => o.companyName || o.customerName)));
 
-  // Filtering
+  // Filtering — GST-exempt orders are hidden from this page after 24 hours; they appear on the GST-Exempt Sales page (admin only).
   const filteredOrders = orders.filter((o) => {
+    // Hide GST-exempt orders that are older than 24 hours
+    if (!isRegularOrder(o) && !isWithin24HourVisibilityWindow(o)) return false;
+
     const query = searchQuery.toLowerCase();
     const orderType = o.orderType || 'REGULAR';
     const matchesSearch =
@@ -141,6 +136,16 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
           <span>{t('New Order')}</span>
         </button>}
       </div>
+
+      {/* Info Banner for 24-hour visibility */}
+      {orders.some((o) => isGstExemptOrder(o) && isWithin24HourVisibilityWindow(o)) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 text-xs text-blue-800 font-medium flex items-start gap-2">
+          <Info className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
+          <span>
+            Some non-GST orders are visible for 24 hours after creation. After this period, they will move to the Admin History section.
+          </span>
+        </div>
+      )}
 
       {/* Filter Toolbar */}
       <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
@@ -263,11 +268,15 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                   return (
                     <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-4 text-slate-500">{order.orderDate}</td>
+                      <td className="py-3.5 px-4 text-slate-500">{formatDate(order.orderDate)}</td>
                       <td className="py-3.5 px-4">
                         {isAS ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
                             AS Order
+                          </span>
+                        ) : isGstExemptOrder(order) ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            No GST
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700">
@@ -338,26 +347,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                               <Truck className="w-4 h-4" />
                             </button>
                           )}
-                          {order.orderStatus === 'pending' && can('salesOrders', 'approve') && (
-                            <button
-                              onClick={() => handleUpdateStatus(order.id, 'confirmed')}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                              title="Approve Order"
-                              aria-label={`Approve ${order.orderNumber}`}
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                          )}
-                          {(order.orderStatus === 'pending' || order.orderStatus === 'confirmed') && can('salesOrders', 'edit') && (
-                            <button
-                              onClick={() => handleUpdateStatus(order.id, 'cancelled')}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                              title="Cancel Order"
-                              aria-label={`Cancel ${order.orderNumber}`}
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          )}
+
                         </div>
                       </td>
                     </tr>
@@ -387,7 +377,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {printDispatch ? 'Sub-Delivery Challan' : 'Delivery Challan'}
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {printDispatch?.dispatchNumber || printOrder.orderNumber} &nbsp;·&nbsp; {printDispatch?.dispatchDate || printOrder.orderDate}
+                  {printDispatch?.dispatchNumber || printOrder.orderNumber} &nbsp;·&nbsp; {formatDate(printDispatch?.dispatchDate || printOrder.orderDate)}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -449,7 +439,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                       #{printDispatch?.dispatchNumber || printOrder.orderNumber}
                     </div>
                     <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
-                      Date: {printDispatch?.dispatchDate || printOrder.orderDate}
+                      Date: {formatDate(printDispatch?.dispatchDate || printOrder.orderDate)}
                     </div>
                   </div>
                 </div>
@@ -637,7 +627,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {printDispatch?.dispatchNumber || printOrder.orderNumber}
                 </div>
                 <div style={{ fontSize: '10px', color: '#64748b' }}>
-                  Date: {printDispatch?.dispatchDate || printOrder.orderDate}
+                  Date: {formatDate(printDispatch?.dispatchDate || printOrder.orderDate)}
                 </div>
               </div>
             </div>

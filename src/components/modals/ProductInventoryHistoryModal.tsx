@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal } from '../common/Modal';
 import { FinishedGoodsLog } from '../../types';
 import { Clock, TrendingUp, Package } from 'lucide-react';
+import { formatDate } from '../../utils/dateUtils';
 
 interface ProductInventoryHistoryModalProps {
   isOpen: boolean;
@@ -34,17 +35,15 @@ export const ProductInventoryHistoryModal: React.FC<ProductInventoryHistoryModal
   const formatDateTime = (log: FinishedGoodsLog): string => {
     if (log.createdAt) {
       const date = new Date(log.createdAt);
-      const day = date.getDate();
-      const month = date.toLocaleString('en-US', { month: 'short' });
-      const year = date.getFullYear();
       const hours = date.getHours();
       const minutes = date.getMinutes().toString().padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
       const displayHours = hours % 12 || 12;
-      return `${day} ${month} ${year}, ${displayHours}:${minutes} ${ampm}`;
+      const dateOnly = formatDate(log.createdAt.split('T')[0]);
+      return `${dateOnly}, ${displayHours}:${minutes} ${ampm}`;
     }
     // Fallback to date only if createdAt is not available
-    return `${log.date} (Time unavailable)`;
+    return `${formatDate(log.date)} (Time unavailable)`;
   };
 
   const getSource = (log: FinishedGoodsLog): string => {

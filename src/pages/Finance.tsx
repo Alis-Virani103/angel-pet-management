@@ -21,6 +21,12 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
+import {
+  buildDayLedger,
+  type DayLedgerRow,
+  type DayLedgerType
+} from '../utils/dayLedger';
+import { formatDate } from '../utils/dateUtils';
 
 interface FinanceProps {
   onOpenRecordPaymentModal: () => void;
@@ -55,19 +61,7 @@ const getNextReminderDate = (
   return next.toISOString().slice(0, 10);
 };
 
-export type DayLedgerType = 'Sale' | 'Customer Payment' | 'Purchase' | 'Supplier Payment' | 'Expense';
-
-export interface DayLedgerRow {
-  id: string;
-  date: string;
-  description: string;
-  party: string;
-  transactionType: DayLedgerType;
-  debit: number;
-  credit: number;
-  balance: number;
-  detailsPath?: string;
-}
+export type { DayLedgerRow, DayLedgerType };
 
 interface PartyLedgerRow {
   date: string;
@@ -132,7 +126,7 @@ export const Finance: React.FC<FinanceProps> = ({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [reminders, setReminders] = useState<PaymentReminder[]>([]);
   const [activeTab, setActiveTab] = useState<'sales' | 'purchase' | 'dispatch' | 'expenses'>('sales');
-  const [salesView, setSalesView] = useState<'orders' | 'payments' | 'reminders' | 'party' | 'ledger'>('orders');
+  const [salesView, setSalesView] = useState<'orders' | 'payments' | 'reminders' | 'party' | 'ledger'>('ledger');
   const [purchaseView, setPurchaseView] = useState<'bills' | 'payments' | 'party'>('bills');
   const [paymentSearch, setPaymentSearch] = useState('');
   const [purchasePaymentSearch, setPurchasePaymentSearch] = useState('');
@@ -256,7 +250,7 @@ export const Finance: React.FC<FinanceProps> = ({
         id: `draft-${order.id}`,
         orderId: order.id,
         customerId: order.customerId,
-        customerName: order.companyName || order.customerName,
+        customerName: order.customerName || order.companyName,
         phone: customer?.phone || 'Not available',
         dueDate: order.dueDate,
         followUpDate: '',
@@ -399,169 +393,55 @@ export const Finance: React.FC<FinanceProps> = ({
     }
   };
 
-  // ── Build Company-Level Day-to-Day Ledger from Real System Data ──────────
-  const rawDayLedger: Array<Omit<DayLedgerRow, 'balance'>> = [];
-
-  // 1. Sales Transactions
-  orders
-    .filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS')
-    .forEach((order) => {
-      const party = order.companyName || order.customerName || 'Customer';
-      const desc = order.items && order.items.length > 0
-        ? `Sale - ${order.items.map((i) => i.productName).filter(Boolean).slice(0, 2).join(', ')}${order.items.length > 2 ? '...' : ''}`
-        : 'Sales';
-      rawDayLedger.push({
-        id: `sale-${order.id}`,
-        date: order.orderDate || '',
-        description: desc,
-        party,
-        transactionType: 'Sale',
-        debit: order.totalAmount || 0,
-        credit: 0,
-        detailsPath: `/sales/${order.id}`
-      });
-    });
-
-  // 2. Customer Payments
-  payments.forEach((payment) => {
-    const party = payment.customerName || 'Customer';
-    rawDayLedger.push({
-      id: `cust-pay-${payment.id}`,
-      date: payment.paymentDate || '',
-      description: 'Payment Received',
-      party,
-      transactionType: 'Customer Payment',
-      debit: 0,
-      credit: payment.amount || 0,
-      detailsPath: payment.orderId ? `/sales/${payment.orderId}` : undefined
-    });
-  });
-
-  // 3. Purchases & Supplier Payments
-  purchases
-    .filter((purchase) => purchase.status !== 'cancelled')
-    .forEach((purchase) => {
-      const party = purchase.supplierName || 'Supplier';
-      const desc = purchase.items && purchase.items.length > 0
-        ? `Raw Material Purchase - ${purchase.items.map((i) => i.rawMaterialName).filter(Boolean).slice(0, 2).join(', ')}${purchase.items.length > 2 ? '...' : ''}`
-        : 'Raw Material Purchase';
-      rawDayLedger.push({
-        id: `purchase-${purchase.id}`,
-        date: purchase.purchaseDate || '',
-        description: desc,
-        party,
-        transactionType: 'Purchase',
-        debit: purchase.totalAmount || 0,
-        credit: 0,
-        detailsPath: `/purchases/${purchase.id}`
-      });
-
-      const recordedPayments = purchase.paymentRecords || [];
-      recordedPayments.forEach((payment) => {
-        rawDayLedger.push({
-          id: `sup-pay-${payment.id}`,
-          date: payment.paymentDate || purchase.purchaseDate || '',
-          description: 'Supplier Payment',
-          party,
-          transactionType: 'Supplier Payment',
-          debit: 0,
-          credit: payment.amount || 0,
-          detailsPath: `/purchases/${purchase.id}`
-        });
-      });
-
-      const recordedTotal = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
-      const legacyPaid = Math.max(0, (purchase.paidAmount || 0) - recordedTotal);
-      if (legacyPaid > 0) {
-        rawDayLedger.push({
-          id: `sup-pay-legacy-${purchase.id}`,
-          date: purchase.purchaseDate || '',
-          description: 'Supplier Payment',
-          party,
-          transactionType: 'Supplier Payment',
-          debit: 0,
-          credit: legacyPaid,
-          detailsPath: `/purchases/${purchase.id}`
-        });
-      }
-    });
-
-  // 4. Expenses
-  expenses.forEach((expense) => {
-    rawDayLedger.push({
-        id: `expense-${expense.id}`,
-        date: expense.expenseDate || '',
-        description: expense.description || 'Factory Expense',
-        party: '—',
-        transactionType: 'Expense',
-        debit: expense.amount || 0,
-        credit: 0
-      });
-    });
-
-  // Sort chronologically ascending
-  const sortedDayLedger = [...rawDayLedger].sort((first, second) => {
-    if (!first.date && second.date) return 1;
-    if (first.date && !second.date) return -1;
-    const dateCmp = (first.date || '').localeCompare(second.date || '');
-    if (dateCmp !== 0) return dateCmp;
-    const typePriority: Record<DayLedgerType, number> = {
-      Sale: 1,
-      Purchase: 2,
-      Expense: 3,
-      'Customer Payment': 4,
-      'Supplier Payment': 5
-    };
-    return (typePriority[first.transactionType] || 9) - (typePriority[second.transactionType] || 9);
-  });
-
-  // Calculate Running Balance across the master chronological timeline
-  let runningLedgerBal = 0;
-  const masterDayLedgerWithBalance: DayLedgerRow[] = sortedDayLedger.map((row) => {
-    runningLedgerBal += row.debit - row.credit;
-    return {
-      ...row,
-      balance: runningLedgerBal
-    };
-  });
-
   const today = toDateKey(new Date());
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
   const weekStartKey = toDateKey(weekStart);
   const monthStart = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
 
-  // Filtered Day-to-Day Ledger Rows
-  const filteredDayLedgerRows = masterDayLedgerWithBalance
-    .filter((row) => {
-      if (dayLedgerTypeFilter !== 'all' && row.transactionType !== dayLedgerTypeFilter) return false;
-      if (dayLedgerPartyFilter !== 'all' && row.party !== dayLedgerPartyFilter) return false;
-      if (dayLedgerDateFilter === 'today') return row.date === today;
-      if (dayLedgerDateFilter === 'week') return row.date >= weekStartKey && row.date <= today;
-      if (dayLedgerDateFilter === 'month') return row.date >= monthStart && row.date <= today;
-      if (dayLedgerDateFilter === 'custom') {
-        return (!dayLedgerStartDate || row.date >= dayLedgerStartDate) && (!dayLedgerEndDate || row.date <= dayLedgerEndDate);
-      }
-      return true;
-    })
-    .filter((row) => {
-      const query = dayLedgerSearch.trim().toLowerCase();
-      if (!query) return true;
-      return (
-        row.description.toLowerCase().includes(query) ||
-        row.party.toLowerCase().includes(query) ||
-        row.transactionType.toLowerCase().includes(query) ||
-        row.date.toLowerCase().includes(query)
-      );
-    });
+  const dayLedgerDateBounds =
+    dayLedgerDateFilter === 'today' ? { start: today, end: today }
+      : dayLedgerDateFilter === 'week' ? { start: weekStartKey, end: today }
+        : dayLedgerDateFilter === 'month' ? { start: monthStart, end: today }
+          : dayLedgerDateFilter === 'custom' ? {
+            start: dayLedgerStartDate || undefined,
+            end: dayLedgerEndDate || undefined
+          }
+            : {};
 
-  const dayLedgerTotalDebit = filteredDayLedgerRows.reduce((sum, row) => sum + row.debit, 0);
-  const dayLedgerTotalCredit = filteredDayLedgerRows.reduce((sum, row) => sum + row.credit, 0);
-  const dayLedgerClosingBalance = filteredDayLedgerRows[filteredDayLedgerRows.length - 1]?.balance || 0;
+  const {
+    rangedRows: dayLedgerRangedRows,
+    summary: dayLedgerSummary,
+    openingBalance: dayLedgerOpeningBalance
+  } = buildDayLedger(
+    { orders, payments, purchases, expenses },
+    dayLedgerDateBounds
+  );
+
+  const filteredDayLedgerRows = dayLedgerRangedRows.filter((row) => {
+    if (dayLedgerTypeFilter !== 'all' && row.transactionType !== dayLedgerTypeFilter) return false;
+    if (dayLedgerPartyFilter !== 'all' && row.party !== dayLedgerPartyFilter) return false;
+    const query = dayLedgerSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      row.description.toLowerCase().includes(query) ||
+      row.party.toLowerCase().includes(query) ||
+      row.transactionType.toLowerCase().includes(query) ||
+      row.date.toLowerCase().includes(query)
+    );
+  });
+
+  const dayLedgerTotalDebit = dayLedgerSummary.totalDebit;
+  const dayLedgerTotalCredit = dayLedgerSummary.totalCredit;
+  const dayLedgerClosingBalance = dayLedgerSummary.closingBalance;
+  const dayLedgerTotalSales = dayLedgerSummary.totalSales;
+  const dayLedgerCustomerPayments = dayLedgerSummary.customerPaymentsReceived;
+  const dayLedgerBusinessExpenses = dayLedgerSummary.businessExpenses;
+  const dayLedgerNetBalance = dayLedgerSummary.netBalance;
 
   const dayLedgerPartyOptions = Array.from(
     new Set(
-      masterDayLedgerWithBalance
+      dayLedgerRangedRows
         .map((row) => row.party)
         .filter((party) => party && party !== '—')
     )
@@ -593,7 +473,7 @@ export const Finance: React.FC<FinanceProps> = ({
           type: 'SALE' as const,
           id: order.orderNumber,
           date: order.orderDate,
-          party: order.companyName || order.customerName,
+          party: order.customerName || order.companyName,
           total: order.totalAmount,
           paid,
           outstanding: Math.max(0, order.totalAmount - paid),
@@ -732,7 +612,7 @@ export const Finance: React.FC<FinanceProps> = ({
     customerOrders.forEach((order) => {
       partyLedgerBase.push({
         date: order.orderDate,
-        party: order.companyName || order.customerName,
+        party: order.customerName || order.companyName,
         transaction: 'Sale',
         reference: order.orderNumber,
         debit: order.totalAmount,
@@ -747,7 +627,7 @@ export const Finance: React.FC<FinanceProps> = ({
         const order = customerOrders.find((candidate) => candidate.id === payment.orderId || candidate.orderNumber === payment.orderId);
         partyLedgerBase.push({
           date: payment.paymentDate,
-          party: customer?.company || customer?.name || order?.companyName || order?.customerName || 'Customer',
+          party: customer?.name || customer?.company || order?.customerName || order?.companyName || 'Customer',
           transaction: 'Payment',
           reference: payment.receiptNumber,
           debit: 0,
@@ -893,7 +773,7 @@ export const Finance: React.FC<FinanceProps> = ({
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">{t('Finance & Accounting')}</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Cash flows, customer collections, outstanding balances, and factory expenses
+            Day ledger, customer collections, outstanding balances, and factory expenses
           </p>
         </div>
 
@@ -924,7 +804,7 @@ export const Finance: React.FC<FinanceProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {(activeTab === 'sales'
-          ? [['Sales orders', totalSales], ['Customer payments', totalCollections], ['Outstanding', pendingCollections]]
+          ? [['Total Sales', totalSales], ['Customer Payments Received', totalCollections], ['Customer outstanding', pendingCollections]]
           : activeTab === 'purchase'
             ? [
                 ['Purchase bills', purchases.filter((purchase) => purchase.status !== 'cancelled').reduce((sum, purchase) => sum + purchase.totalAmount, 0)],
@@ -933,7 +813,7 @@ export const Finance: React.FC<FinanceProps> = ({
               ]
             : activeTab === 'dispatch'
               ? [['Delivery challans', filteredDispatches.length], ['Delivered', filteredDispatches.filter((dispatch) => dispatch.status === 'delivered').length], ['In progress', filteredDispatches.filter((dispatch) => dispatch.status !== 'delivered').length]]
-              : [['Expenses', filteredExpenses.length], ['Recorded amount', filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0)], ['Pending expenses', filteredExpenses.filter((expense) => expense.status === 'pending').reduce((sum, expense) => sum + expense.amount, 0)]]
+              : [['Expenses', filteredExpenses.length], ['Paid amount', filteredExpenses.filter((expense) => expense.status === 'paid').reduce((sum, expense) => sum + expense.amount, 0)], ['Pending amount', filteredExpenses.filter((expense) => expense.status === 'pending').reduce((sum, expense) => sum + expense.amount, 0)]]
         ).map(([label, value]) => (
           <div key={String(label)} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
@@ -957,7 +837,7 @@ export const Finance: React.FC<FinanceProps> = ({
                 onClick={() => {
                   setActiveTab(tab);
                   if (tab === 'sales') {
-                    setSalesView('orders');
+                    setSalesView('ledger');
                     setStatementFilter('sales');
                     setPartyType('customer');
                     setSelectedPartyId(customers[0]?.id || ALL_PARTIES_ID);
@@ -992,11 +872,11 @@ export const Finance: React.FC<FinanceProps> = ({
           <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
             {(activeTab === 'sales'
               ? [
+                  ['ledger', 'Day ledger'],
                   ['orders', 'Orders & balances'],
                   ['payments', 'Customer payments'],
                   ['reminders', `Reminders (${reminderRows.length + customerReminderRows.length})`],
-                  ['party', 'Customer ledger'],
-                  ['ledger', 'Day ledger']
+                  ['party', 'Customer ledger']
                 ]
               : [
                   ['bills', 'Purchase bills'],
@@ -1026,23 +906,30 @@ export const Finance: React.FC<FinanceProps> = ({
         {activeTab === 'sales' && salesView === 'ledger' ? (
           <div className="space-y-4">
             {/* Day-to-Day Ledger Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100/80">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Total Debit')}</div>
-                <div className="text-lg font-bold text-blue-700 mt-1">{formatCurrency(dayLedgerTotalDebit)}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Sales, Purchases & Expenses</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Sales</div>
+                <div className="text-lg font-bold text-blue-700 mt-1">{formatCurrency(dayLedgerTotalSales)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Sales invoices in this period</div>
               </div>
               <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-100/80">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Total Credit')}</div>
-                <div className="text-lg font-bold text-emerald-700 mt-1">{formatCurrency(dayLedgerTotalCredit)}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Customer & Supplier Payments</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Customer Payments Received</div>
+                <div className="text-lg font-bold text-emerald-700 mt-1">{formatCurrency(dayLedgerCustomerPayments)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Collections received from customers</div>
+              </div>
+              <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-100/80">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Business Expenses</div>
+                <div className="text-lg font-bold text-rose-700 mt-1">{formatCurrency(dayLedgerBusinessExpenses)}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Factory and office expenses</div>
               </div>
               <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-100/80">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Closing Balance')}</div>
-                <div className={`text-lg font-bold mt-1 ${dayLedgerClosingBalance >= 0 ? 'text-purple-700' : 'text-rose-700'}`}>
-                  {formatCurrency(dayLedgerClosingBalance)}
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Net Balance</div>
+                <div className={`text-lg font-bold mt-1 ${dayLedgerNetBalance >= 0 ? 'text-purple-700' : 'text-rose-700'}`}>
+                  {formatCurrency(dayLedgerNetBalance)}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Net Cumulative Ledger Position</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Total Sales − Customer Payments Received − Business Expenses
+                </div>
               </div>
             </div>
 
@@ -1140,6 +1027,10 @@ export const Finance: React.FC<FinanceProps> = ({
               </div>
             )}
 
+            <p className="text-[11px] text-slate-500">
+              Running balance starts at ₹0, then adds each sale and subtracts each customer payment and business expense in date order. Purchase bills and supplier payments stay in the book for reference but do not change this Net Balance. This is not profit and not cash in hand.
+            </p>
+
             {/* Day-to-Day Ledger Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -1162,9 +1053,25 @@ export const Finance: React.FC<FinanceProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredDayLedgerRows.map((row) => (
+                    <>
+                    {dayLedgerDateBounds.start ? (
+                      <tr className="bg-slate-50/80">
+                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{dayLedgerDateBounds.start}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">Opening Net Balance</td>
+                        <td className="py-3 px-4 font-medium text-slate-800">—</td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/60">Opening</span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold text-blue-700 whitespace-nowrap">—</td>
+                        <td className="py-3 px-4 text-right font-semibold text-emerald-700 whitespace-nowrap">—</td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
+                          {formatCurrency(dayLedgerOpeningBalance)}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {filteredDayLedgerRows.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date || '—'}</td>
+                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date ? formatDate(row.date) : '—'}</td>
                         <td className="py-3 px-4 font-semibold text-slate-900">
                           {row.detailsPath ? (
                             <Link to={row.detailsPath} className="hover:text-blue-600 transition-colors">
@@ -1186,7 +1093,8 @@ export const Finance: React.FC<FinanceProps> = ({
                           {formatCurrency(row.balance)}
                         </td>
                       </tr>
-                    ))
+                    ))}
+                    </>
                   )}
                 </tbody>
               </table>
@@ -1208,7 +1116,20 @@ export const Finance: React.FC<FinanceProps> = ({
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Party')}</div>
                     <div className="relative w-48">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input value={partySearch} onChange={(event) => setPartySearch(event.target.value)} placeholder="Search party" className="w-full pl-8 pr-2 py-1.5 text-xs bg-white rounded-lg border border-slate-200" />
+                      <input
+                        value={partySearch}
+                        onChange={(event) => setPartySearch(event.target.value)}
+                        placeholder="Search party"
+                        list="party-search-suggestions"
+                        className="w-full pl-8 pr-2 py-1.5 text-xs bg-white rounded-lg border border-slate-200"
+                      />
+                      <datalist id="party-search-suggestions">
+                        {[...new Set([
+                          ...partyOptions.map(p => p.name).filter(Boolean)
+                        ])].sort().map((suggestion, index) => (
+                          <option key={index} value={suggestion} />
+                        ))}
+                      </datalist>
                     </div>
                   </div>
                   <select value={selectedPartyId} onChange={(event) => setSelectedPartyId(event.target.value)} className="mt-2 w-full px-3 py-2 bg-white text-xs font-semibold rounded-lg border border-slate-200">
@@ -1247,7 +1168,7 @@ export const Finance: React.FC<FinanceProps> = ({
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider"><th className="py-3 px-4">Date</th>{isAllParties && <th className="py-3 px-4">Party</th>}<th className="py-3 px-4">Transaction</th><th className="py-3 px-4 text-right">Debit</th><th className="py-3 px-4 text-right">Credit</th><th className="py-3 px-4 text-right">Balance</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                  {!selectedPartyId || partyLedgerRows.length === 0 ? <tr><td colSpan={isAllParties ? 6 : 5} className="py-12 text-center text-slate-400">{selectedPartyId ? 'No transactions found for the selected period.' : 'Select a party with transactions to view its statement.'}</td></tr> : partyLedgerRows.map((row) => <tr key={`${row.party || ''}-${row.transaction}-${row.reference}-${row.date}`} className="hover:bg-slate-50/60"><td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date || 'Date unavailable'}</td>{isAllParties && <td className="py-3 px-4 font-semibold text-slate-900">{row.party}</td>}<td className="py-3 px-4 font-semibold text-slate-900">{row.transaction}</td><td className="py-3 px-4 text-right font-semibold text-blue-700">{row.debit ? formatCurrency(row.debit) : '—'}</td><td className="py-3 px-4 text-right font-semibold text-emerald-700">{row.credit ? formatCurrency(row.credit) : '—'}</td><td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.balance)}</td></tr>)}
+                  {!selectedPartyId || partyLedgerRows.length === 0 ? <tr><td colSpan={isAllParties ? 6 : 5} className="py-12 text-center text-slate-400">{selectedPartyId ? 'No transactions found for the selected period.' : 'Select a party with transactions to view its statement.'}</td></tr> : partyLedgerRows.map((row) => <tr key={`${row.party || ''}-${row.transaction}-${row.reference}-${row.date}`} className="hover:bg-slate-50/60"><td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date ? formatDate(row.date) : 'Date unavailable'}</td>{isAllParties && <td className="py-3 px-4 font-semibold text-slate-900">{row.party}</td>}<td className="py-3 px-4 font-semibold text-slate-900">{row.transaction}</td><td className="py-3 px-4 text-right font-semibold text-blue-700">{row.debit ? formatCurrency(row.debit) : '—'}</td><td className="py-3 px-4 text-right font-semibold text-emerald-700">{row.credit ? formatCurrency(row.credit) : '—'}</td><td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.balance)}</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -1288,8 +1209,26 @@ export const Finance: React.FC<FinanceProps> = ({
                     value={statementSearch}
                     onChange={(event) => setStatementSearch(event.target.value)}
                     placeholder={activeTab === 'sales' ? 'Search order or customer' : 'Search bill or supplier'}
+                    list={activeTab === 'sales' ? 'statement-search-suggestions-sales' : 'statement-search-suggestions-purchase'}
                     className="w-full sm:w-64 pl-9 pr-3 py-2 bg-slate-50 text-xs rounded-lg border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                   />
+                  <datalist id="statement-search-suggestions-sales">
+                    {[...new Set([
+                      ...customers.map(c => c.name).filter(Boolean),
+                      ...orders.map(o => o.orderNumber).filter(Boolean),
+                      ...orders.map(o => o.customerName).filter(Boolean)
+                    ])].sort().map((suggestion, index) => (
+                      <option key={index} value={suggestion} />
+                    ))}
+                  </datalist>
+                  <datalist id="statement-search-suggestions-purchase">
+                    {[...new Set([
+                      ...purchases.map(p => p.supplierName).filter(Boolean),
+                      ...purchases.map(p => p.purchaseNumber).filter(Boolean)
+                    ])].sort().map((suggestion, index) => (
+                      <option key={index} value={suggestion} />
+                    ))}
+                  </datalist>
                 </div>
                 <select
                   value={dateFilter}
@@ -1313,7 +1252,7 @@ export const Finance: React.FC<FinanceProps> = ({
                   onClick={() => exportRowsToCsv(activeTab === 'sales' ? 'sales-orders.csv' : 'purchase-bills.csv', filteredStatementRows.map((row) => ({
                     type: row.type,
                     reference: row.id,
-                    date: row.date,
+                    date: formatDate(row.date),
                     party: row.party,
                     total: row.total,
                     paid: row.paid,
@@ -1364,7 +1303,7 @@ export const Finance: React.FC<FinanceProps> = ({
                     <tr key={`${row.type}-${row.id}`} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3 px-4"><span className={`inline-flex px-2 py-1 rounded-md text-[10px] font-bold ${row.type === 'SALE' ? 'bg-blue-50 text-blue-700' : 'bg-indigo-50 text-indigo-700'}`}>{row.type}</span></td>
                       <td className="py-3 px-4 font-semibold"><Link to={row.detailsPath} className="text-blue-600 hover:underline">{row.id}</Link></td>
-                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date}</td>
+                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="py-3 px-4 font-semibold text-slate-900">{row.party}</td>
                       <td className="py-3 px-4 text-right font-semibold text-slate-900 whitespace-nowrap">{formatCurrency(row.total)}</td>
                       <td className="py-3 px-4 text-right font-semibold text-emerald-700 whitespace-nowrap">{formatCurrency(row.paid)}</td>
@@ -1544,7 +1483,25 @@ export const Finance: React.FC<FinanceProps> = ({
         ) : activeTab === 'sales' && salesView === 'payments' ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <input value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} placeholder="Search customer, order or receipt" className="min-h-10 min-w-[220px] flex-1 rounded-lg border border-slate-200 px-3 text-xs" />
+              <div className="relative flex-1 min-w-[220px]">
+                <input
+                  value={paymentSearch}
+                  onChange={(event) => setPaymentSearch(event.target.value)}
+                  placeholder="Search customer, order or receipt"
+                  list="payment-search-suggestions"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 px-3 text-xs"
+                />
+                <datalist id="payment-search-suggestions">
+                  {[...new Set([
+                    ...customers.map(c => c.name).filter(Boolean),
+                    ...payments.map(p => p.customerName).filter(Boolean),
+                    ...payments.map(p => p.orderNumber).filter(Boolean),
+                    ...payments.map(p => p.receiptNumber).filter(Boolean)
+                  ])].sort().map((suggestion, index) => (
+                    <option key={index} value={suggestion} />
+                  ))}
+                </datalist>
+              </div>
               <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs">
                 <option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option>
               </select>
@@ -1567,7 +1524,23 @@ export const Finance: React.FC<FinanceProps> = ({
         ) : activeTab === 'purchase' && purchaseView === 'payments' ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <input value={purchasePaymentSearch} onChange={(event) => setPurchasePaymentSearch(event.target.value)} placeholder="Search supplier or purchase bill" className="min-h-10 min-w-[220px] flex-1 rounded-lg border border-slate-200 px-3 text-xs" />
+              <div className="relative flex-1 min-w-[220px]">
+                <input
+                  value={purchasePaymentSearch}
+                  onChange={(event) => setPurchasePaymentSearch(event.target.value)}
+                  placeholder="Search supplier or purchase bill"
+                  list="supplier-payment-search-suggestions"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 px-3 text-xs"
+                />
+                <datalist id="supplier-payment-search-suggestions">
+                  {[...new Set([
+                    ...purchases.map(p => p.supplierName).filter(Boolean),
+                    ...purchases.map(p => p.purchaseNumber).filter(Boolean)
+                  ])].sort().map((suggestion, index) => (
+                    <option key={index} value={suggestion} />
+                  ))}
+                </datalist>
+              </div>
               <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs">
                 <option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option>
               </select>
@@ -1590,7 +1563,25 @@ export const Finance: React.FC<FinanceProps> = ({
         ) : activeTab === 'dispatch' ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <input value={dispatchSearch} onChange={(event) => setDispatchSearch(event.target.value)} placeholder="Search challan, order, customer or vehicle" className="min-h-10 min-w-[220px] flex-1 rounded-lg border border-slate-200 px-3 text-xs" />
+              <div className="relative flex-1 min-w-[220px]">
+                <input
+                  value={dispatchSearch}
+                  onChange={(event) => setDispatchSearch(event.target.value)}
+                  placeholder="Search challan, order, customer or vehicle"
+                  list="dispatch-search-suggestions"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 px-3 text-xs"
+                />
+                <datalist id="dispatch-search-suggestions">
+                  {[...new Set([
+                    ...dispatches.map(d => d.dispatchNumber).filter(Boolean),
+                    ...dispatches.map(d => d.orderNumber).filter(Boolean),
+                    ...dispatches.map(d => d.customerName).filter(Boolean),
+                    ...dispatches.map(d => d.vehicleNumber).filter(Boolean)
+                  ])].sort().map((suggestion, index) => (
+                    <option key={index} value={suggestion} />
+                  ))}
+                </datalist>
+              </div>
               <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs">
                 <option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option>
               </select>
@@ -1612,15 +1603,32 @@ export const Finance: React.FC<FinanceProps> = ({
         ) : activeTab === 'expenses' ? (
           <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input value={expenseSearch} onChange={(event) => setExpenseSearch(event.target.value)} placeholder="Search voucher, category or description" className="min-h-10 min-w-[220px] flex-1 rounded-lg border border-slate-200 px-3 text-xs" />
+            <div className="relative flex-1 min-w-[220px]">
+              <input
+                value={expenseSearch}
+                onChange={(event) => setExpenseSearch(event.target.value)}
+                placeholder="Search voucher, category or description"
+                list="expense-search-suggestions"
+                className="min-h-10 w-full rounded-lg border border-slate-200 px-3 text-xs"
+              />
+              <datalist id="expense-search-suggestions">
+                {[...new Set([
+                  ...expenses.map(e => e.id).filter(Boolean),
+                  ...expenses.map(e => e.category).filter(Boolean),
+                  ...expenses.map(e => e.description).filter(Boolean)
+                ])].sort().map((suggestion, index) => (
+                  <option key={index} value={suggestion} />
+                ))}
+              </datalist>
+            </div>
             <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs">
               <option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option>
             </select>
             <button onClick={() => window.print()} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white"><Printer className="h-3.5 w-3.5" />Print</button>
-            <button onClick={() => exportRowsToCsv('expenses.csv', filteredExpenses.map((expense) => ({ voucher: expense.id, category: expense.category, description: expense.description, amount: expense.amount, method: expense.paymentMethod, date: expense.expenseDate, status: expense.status })))} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Export CSV</button>
+            <button onClick={() => exportRowsToCsv('expenses.csv', filteredExpenses.map((expense) => ({ voucher: expense.id, category: expense.category, description: expense.description, amount: expense.amount, method: expense.paymentMethod, date: expense.expenseDate, status: expense.status, isPaid: expense.status === 'paid' ? 'Yes' : 'No' })))} className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Export CSV</button>
           </div>
           {dateFilter === 'custom' && <div className="flex flex-wrap gap-3 text-xs text-slate-500"><label>From <input type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} className="ml-1 rounded border border-slate-200 px-2 py-1.5" /></label><label>To <input type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} className="ml-1 rounded border border-slate-200 px-2 py-1.5" /></label></div>}
-          <div className="text-xs font-semibold text-slate-600">Expenses in this period: {formatCurrency(filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0))}</div>
+          <div className="text-xs font-semibold text-slate-600">Total expenses in this period: {formatCurrency(filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0))} (Paid: {formatCurrency(filteredExpenses.filter((expense) => expense.status === 'paid').reduce((sum, expense) => sum + expense.amount, 0))}, Pending: {formatCurrency(filteredExpenses.filter((expense) => expense.status === 'pending').reduce((sum, expense) => sum + expense.amount, 0))})</div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -1839,7 +1847,7 @@ export const Finance: React.FC<FinanceProps> = ({
                 Company Day-to-Day Ledger
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                Generated: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                Generated: {formatDate(new Date().toISOString().split('T')[0])}
               </p>
               <p className="text-xs font-medium text-slate-700 mt-0.5">
                 {dayLedgerDateFilter === 'today'
@@ -1881,7 +1889,7 @@ export const Finance: React.FC<FinanceProps> = ({
                 <th className="py-2.5 px-3">Transaction Type</th>
                 <th className="py-2.5 px-3 text-right">Debit (₹)</th>
                 <th className="py-2.5 px-3 text-right">Credit (₹)</th>
-                <th className="py-2.5 px-3 text-right">Balance (₹)</th>
+                <th className="py-2.5 px-3 text-right">Running Balance (₹)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -1894,7 +1902,7 @@ export const Finance: React.FC<FinanceProps> = ({
               ) : (
                 filteredDayLedgerRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100">
-                    <td className="py-2 px-3 whitespace-nowrap text-slate-700">{row.date || '—'}</td>
+                    <td className="py-2 px-3 whitespace-nowrap text-slate-700">{row.date ? formatDate(row.date) : '—'}</td>
                     <td className="py-2 px-3 font-medium text-slate-900">{row.description}</td>
                     <td className="py-2 px-3 text-slate-800">{row.party}</td>
                     <td className="py-2 px-3 font-semibold text-slate-700">{row.transactionType}</td>
@@ -1932,7 +1940,7 @@ export const Finance: React.FC<FinanceProps> = ({
               <span className="text-base font-bold text-slate-900">{formatCurrency(dayLedgerTotalCredit)}</span>
             </div>
             <div>
-              <span className="text-slate-500 font-medium block">Closing Balance:</span>
+              <span className="text-slate-500 font-medium block">Closing Net Balance:</span>
               <span className="text-base font-bold text-slate-900">{formatCurrency(dayLedgerClosingBalance)}</span>
             </div>
           </div>

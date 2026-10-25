@@ -1,4 +1,4 @@
-import { RawMaterial } from '../types';
+import { PurchaseItem, RawMaterial } from '../types';
 
 /**
  * Weight-to-pieces calculation for raw materials
@@ -81,6 +81,83 @@ export function calculatePiecesFromWeight(input: WeightToPiecesInput): WeightToP
     pieces,
     isValid: true
   };
+}
+
+export interface BagPieceConversion {
+  totalWeightGrams: number;
+  calculatedPieces: number;
+}
+
+const isBagUnit = (unit?: string) => {
+  const value = (unit || '').trim().toLowerCase();
+  return value === 'bag' || value === 'bags';
+};
+
+/**
+ * Load bag/piece weights from a saved material only when those specs already exist.
+ * Missing values stay undefined so the purchase form never invents them.
+ */
+export function deriveMaterialBagSpecs(material: Pick<RawMaterial, 'purchaseUnit' | 'baseUnit' | 'unit' | 'conversionFactor' | 'piecesPerBaseUnit'>): {
+  weightPerBagKg?: number;
+  weightPerPieceGrams?: number;
+} {
+  const specs: { weightPerBagKg?: number; weightPerPieceGrams?: number } = {};
+  const baseUnit = (material.baseUnit || material.unit || '').toLowerCase();
+  if (isBagUnit(material.purchaseUnit) && material.conversionFactor > 0) {
+    if (baseUnit === 'kg') specs.weightPerBagKg = material.conversionFactor;
+    if (baseUnit === 'g') specs.weightPerBagKg = material.conversionFactor / 1000;
+  }
+  if (material.piecesPerBaseUnit && material.piecesPerBaseUnit > 0) {
+    if (baseUnit === 'kg') specs.weightPerPieceGrams = 1000 / material.piecesPerBaseUnit;
+    if (baseUnit === 'g') specs.weightPerPieceGrams = 1 / material.piecesPerBaseUnit;
+  }
+  return specs;
+}
+
+export function calculateBagPieceConversion(input: {
+  numberOfBags: number;
+  weightPerBagKg: number;
+  weightPerPieceGrams: number;
+}): BagPieceConversion | { error: string } {
+  if (!Number.isFinite(input.numberOfBags) || input.numberOfBags <= 0) {
+    return { error: 'Number of bags must be greater than 0.' };
+  }
+  if (!Number.isFinite(input.weightPerBagKg) || input.weightPerBagKg <= 0) {
+    return { error: 'Weight per bag must be greater than 0.' };
+  }
+  if (!Number.isFinite(input.weightPerPieceGrams) || input.weightPerPieceGrams <= 0) {
+    return { error: 'Weight per piece must be greater than 0. Division by zero is not allowed.' };
+  }
+  const totalWeightGrams = input.numberOfBags * input.weightPerBagKg * 1000;
+  return {
+    totalWeightGrams,
+    calculatedPieces: totalWeightGrams / input.weightPerPieceGrams
+  };
+}
+
+export function bagConversionToBaseQuantity(
+  conversion: BagPieceConversion,
+  material: Pick<RawMaterial, 'baseUnit' | 'unit'>
+): number {
+  const baseUnit = (material.baseUnit || material.unit || 'kg').toLowerCase();
+  if (baseUnit === 'pcs') return conversion.calculatedPieces;
+  if (baseUnit === 'g') return conversion.totalWeightGrams;
+  return conversion.totalWeightGrams / 1000;
+}
+
+export function getReceivedPurchaseBaseQuantity(
+  item: Pick<PurchaseItem, 'quantity' | 'unit' | 'numberOfBags' | 'weightPerBagKg' | 'weightPerPieceGrams'>,
+  material: RawMaterial
+): number {
+  const conversion = calculateBagPieceConversion({
+    numberOfBags: item.numberOfBags ?? 0,
+    weightPerBagKg: item.weightPerBagKg ?? 0,
+    weightPerPieceGrams: item.weightPerPieceGrams ?? 0
+  });
+  if (!('error' in conversion)) {
+    return bagConversionToBaseQuantity(conversion, material);
+  }
+  return toBaseQuantity(item.quantity, item.unit, material);
 }
 
 /**

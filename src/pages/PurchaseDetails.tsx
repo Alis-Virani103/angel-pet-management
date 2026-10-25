@@ -4,6 +4,7 @@ import { PurchaseOrder } from '../types';
 import { getPurchases, updatePurchaseStatus } from '../services/db';
 import { Badge } from '../components/common/Badge';
 import { EditPurchaseItemsModal } from '../components/modals/EditPurchaseItemsModal';
+import { formatDate } from '../utils/dateUtils';
 import {
   ArrowLeft,
   Building2,
@@ -106,7 +107,7 @@ export const PurchaseDetails: React.FC<PurchaseDetailsProps> = ({
               <Badge status={purchase.paymentStatus} />
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Purchased on {purchase.purchaseDate}
+              Purchased on {formatDate(purchase.purchaseDate)}
             </p>
           </div>
         </div>

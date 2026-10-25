@@ -9,6 +9,7 @@ import { formatPackagingMode } from '../utils/packagingUtils';
 import { formatWeight, getWeightInGrams } from '../utils/weightUtils';
 import { getOrderDeliveryProgress } from '../utils/dispatchUtils';
 import { formatNumberDisplay } from '../utils/packetUtils';
+import { formatDate } from '../utils/dateUtils';
 import {
   ArrowLeft,
   Printer,
@@ -587,7 +588,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
             </Link>
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Order Placed on {order.orderDate}</h1>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Order Placed on {formatDate(order.orderDate)}</h1>
                 {isAS ? (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
                     Order Type: AS Order
@@ -602,6 +603,15 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                 {!isAS && (
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${isCashMemo ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
                     {isCashMemo ? 'Cash Memo (Paid)' : 'Debit Memo (Credit)'}
+                  </span>
+                )}
+                {!isAS && (
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    isGst
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                  }`}>
+                    {isGst ? 'Tax Invoice (GST Applied)' : 'Kachha Bill (GST-Exempt)'}
                   </span>
                 )}
               </div>
@@ -726,6 +736,12 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
                 <span>Financial Summary</span>
               </div>
               <div className="space-y-1 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Tax Status:</span>
+                  <span className={`font-bold ${isGst ? 'text-blue-700' : 'text-amber-700'}`}>
+                    {isGst ? `GST Applied (${order.gstRate}%)` : 'GST-Exempt (0%)'}
+                  </span>
+                </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Document Mode:</span>
                   <span className="font-bold text-slate-900">{isCashMemo ? 'Cash Memo (Paid at sale)' : 'Debit Memo (Credit)'}</span>
@@ -1049,15 +1065,21 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
             <div className="w-full sm:w-72 space-y-2 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal:</span>
-                <span className="font-semibold">₹{order.subtotal.toLocaleString()}</span>
+                <span className="font-semibold">₹{order.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>GST ({order.gstRate}%):</span>
-                <span className="font-semibold">₹{order.gstAmount.toLocaleString()}</span>
+                <span>GST:</span>
+                <span className="font-semibold">
+                  {isGst && order.gstRate > 0 && order.gstAmount > 0 ? (
+                    `₹${order.gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${order.gstRate}%)`
+                  ) : (
+                    <span className="text-emerald-600 font-semibold">Exempt (0%)</span>
+                  )}
+                </span>
               </div>
               <div className="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-slate-200">
                 <span>Grand Total:</span>
-                <span className="text-blue-600">₹{order.totalAmount.toLocaleString()}</span>
+                <span className="text-blue-600">₹{order.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
