@@ -259,6 +259,24 @@ export interface Expense {
   paymentMethod: PaymentMethod;
 }
 
+export type FinanceTransactionType = 'sale' | 'customer_payment' | 'purchase' | 'supplier_payment' | 'expense';
+
+export interface FinanceTransaction {
+  id: string;
+  transactionType: FinanceTransactionType;
+  amount: number; // Positive for money received, negative for money paid
+  party: string; // Customer name or supplier name
+  partyType: 'customer' | 'supplier' | 'expense' | 'internal';
+  referenceId: string; // Order ID, Purchase ID, Expense ID, or Payment ID
+  referenceNumber?: string; // Order number, purchase number, receipt number, etc.
+  transactionDate: string;
+  description: string;
+  category?: string; // For expenses: 'raw_materials', 'utilities', etc.
+  paymentMethod?: PaymentMethod;
+  notes?: string;
+  createdAt: string;
+}
+
 export type RawMaterialCategory = 'granules' | 'masterbatch' | 'colour' | 'packaging';
 
 export interface RawMaterial {
@@ -346,6 +364,9 @@ export interface PurchaseItem {
   weightPerPieceGrams?: number;
   totalWeightGrams?: number;
   calculatedPieces?: number;
+  wastage1Pieces?: number;
+  wastage2Pieces?: number;
+  netAvailablePieces?: number;
 }
 
 export interface PurchaseOrder {

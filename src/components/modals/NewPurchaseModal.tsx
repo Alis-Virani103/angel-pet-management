@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
-import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus, Supplier } from '../../types';
-import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers } from '../../services/db';
+import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus, Supplier, PurchasedMaterial } from '../../types';
+import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers, getPurchasedMaterials } from '../../services/db';
 import {
   toBaseQuantity,
   deriveMaterialBagSpecs,
@@ -26,6 +26,8 @@ interface DraftPurchaseItem {
   numberOfBags: string;
   weightPerBagKg: string;
   weightPerPieceGrams: string;
+  wastage1Pieces: string;
+  wastage2Pieces: string;
 }
 
 const createDraftItem = (rawMaterialId = '', quantity = '', unit = '', unitCost = ''): DraftPurchaseItem => ({
@@ -36,7 +38,9 @@ const createDraftItem = (rawMaterialId = '', quantity = '', unit = '', unitCost 
   unitCost,
   numberOfBags: '',
   weightPerBagKg: '',
-  weightPerPieceGrams: ''
+  weightPerPieceGrams: '',
+  wastage1Pieces: '',
+  wastage2Pieces: ''
 });
 
 interface SearchableMaterialSelectProps {
@@ -335,12 +339,55 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     setSupplierLoadError('');
     setSuppliers([]);
     setSelectedSupplierId('');
-    const [materialsResult, suppliersResult] = await Promise.allSettled([getRawMaterials(), getSuppliers()]);
-    if (materialsResult.status === 'fulfilled') {
-      setMaterials(materialsResult.value);
+    const [rawMaterialsResult, purchasedMaterialsResult, suppliersResult] = await Promise.allSettled([
+      getRawMaterials(),
+      getPurchasedMaterials(),
+      getSuppliers()
+    ]);
+    
+    // Combine raw materials and purchased materials into a single list
+    const allMaterials: RawMaterial[] = [];
+    
+    if (rawMaterialsResult.status === 'fulfilled') {
+      allMaterials.push(...rawMaterialsResult.value);
     } else {
-      console.error('Error loading raw materials:', materialsResult.reason);
+      console.error('Error loading raw materials:', rawMaterialsResult.reason);
     }
+    
+    if (purchasedMaterialsResult.status === 'fulfilled') {
+      // Convert PurchasedMaterial to RawMaterial format for dropdown
+      const purchasedAsRaw = purchasedMaterialsResult.value.map((pm): RawMaterial => ({
+        id: pm.id,
+        name: pm.materialName,
+        code: pm.materialName, // Use material name as code/SKU if not available
+        category: 'granules', // Default category for purchased materials
+        currentStock: pm.totalPieces || 0, // Use pieces if available
+        minimumStock: 0,
+        unit: 'pcs',
+        baseUnit: 'pcs',
+        purchaseUnit: 'pcs',
+        consumptionUnit: 'pcs',
+        conversionFactor: 1,
+        piecesPerBaseUnit: undefined,
+        unitCost: 0,
+        supplier: pm.supplier,
+        status: 'healthy',
+        lastRestocked: pm.createdAt
+      }));
+      
+      // Merge with existing materials, avoiding duplicates by name
+      const existingNames = new Set(allMaterials.map(m => m.name.toLowerCase()));
+      purchasedAsRaw.forEach(pm => {
+        if (!existingNames.has(pm.name.toLowerCase())) {
+          allMaterials.push(pm);
+        }
+      });
+    } else {
+      console.error('Error loading purchased materials:', purchasedMaterialsResult.reason);
+    }
+    
+    setMaterials(allMaterials);
+    
     if (suppliersResult.status === 'fulfilled') {
       setSuppliers(suppliersResult.value);
     } else {
@@ -461,6 +508,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           calculatedPieces: conversion.calculatedPieces
         }
       : {};
+    const wastage1Pieces = Number(item.wastage1Pieces) || 0;
+    const wastage2Pieces = Number(item.wastage2Pieces) || 0;
+    const totalWastage = wastage1Pieces + wastage2Pieces;
+    const netAvailablePieces = conversion && !('error' in conversion)
+      ? Math.max(0, conversion.calculatedPieces - totalWastage)
+      : undefined;
     return {
       rawMaterialId: useInlineName && isFirstItemWithInline ? '' : item.rawMaterialId,
       rawMaterialName: isFirstItemWithInline ? (newMaterialName.trim() || 'New Raw Material') : (material?.name || ''),
@@ -471,7 +524,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       quantity,
       subtotal: quantity * unitCost,
       taxRate: includeGst ? 18 : 0,
-      ...conversionFields
+      ...conversionFields,
+      wastage1Pieces: wastage1Pieces > 0 ? wastage1Pieces : undefined,
+      wastage2Pieces: wastage2Pieces > 0 ? wastage2Pieces : undefined,
+      netAvailablePieces
     };
   };
 
@@ -530,6 +586,33 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         weightPerPieceGrams: Number(invalidConversion.weightPerPieceGrams)
       });
       setError('error' in conversion ? conversion.error : 'Enter number of bags, weight per bag (kg), and weight per piece (g).');
+      return;
+    }
+
+    // Validate wastage doesn't exceed calculated pieces
+    const invalidWastage = nonBlankItems.find((item) => {
+      if (!item.numberOfBags.trim()) return false;
+      const conversion = calculateBagPieceConversion({
+        numberOfBags: Number(item.numberOfBags),
+        weightPerBagKg: Number(item.weightPerBagKg),
+        weightPerPieceGrams: Number(item.weightPerPieceGrams)
+      });
+      if ('error' in conversion) return false;
+      const totalWastage = (Number(item.wastage1Pieces) || 0) + (Number(item.wastage2Pieces) || 0);
+      return totalWastage > conversion.calculatedPieces;
+    });
+    if (invalidWastage) {
+      const conversion = calculateBagPieceConversion({
+        numberOfBags: Number(invalidWastage.numberOfBags),
+        weightPerBagKg: Number(invalidWastage.weightPerBagKg),
+        weightPerPieceGrams: Number(invalidWastage.weightPerPieceGrams)
+      });
+      if ('error' in conversion) {
+        setError(conversion.error);
+        return;
+      }
+      const totalWastage = (Number(invalidWastage.wastage1Pieces) || 0) + (Number(invalidWastage.wastage2Pieces) || 0);
+      setError(`Total wastage (${totalWastage} pieces) cannot exceed calculated pieces (${conversion.calculatedPieces.toLocaleString()}).`);
       return;
     }
     if (!selectedSupplier) {
@@ -861,6 +944,47 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                       {bagConversion && 'error' in bagConversion && Number(item.numberOfBags) > 0 && (
                         <div className="text-[10px] text-rose-600 mt-1">{bagConversion.error}</div>
                       )}
+                    </div>
+                  </div>
+                )}
+                {/* Wastage Section - Only show when pieces are calculated */}
+                {bagConversion && !('error' in bagConversion) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Wastage 1 (pieces)</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={`Wastage 1 for purchase item ${index + 1}`}
+                        value={item.wastage1Pieces}
+                        onChange={(e) => updateItem(item.id, { wastage1Pieces: e.target.value.replace(/\D/g, '') })}
+                        className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Wastage 2 (pieces)</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={`Wastage 2 for purchase item ${index + 1}`}
+                        value={item.wastage2Pieces}
+                        onChange={(e) => updateItem(item.id, { wastage2Pieces: e.target.value.replace(/\D/g, '') })}
+                        className="w-full px-3 py-2.5 bg-slate-50 text-xs font-medium text-slate-800 rounded-xl border border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="rounded-xl bg-amber-50 px-3 py-2.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Total wastage</div>
+                      <div className="text-sm font-bold text-amber-800 mt-0.5">
+                        {(Number(item.wastage1Pieces) || 0) + (Number(item.wastage2Pieces) || 0)} pcs
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">Net available</div>
+                      <div className="text-sm font-bold text-emerald-800 mt-0.5">
+                        {Math.max(0, bagConversion.calculatedPieces - (Number(item.wastage1Pieces) || 0) - (Number(item.wastage2Pieces) || 0)).toLocaleString('en-IN')} pcs
+                      </div>
                     </div>
                   </div>
                 )}

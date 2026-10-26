@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Order, Payment, Expense, PurchaseOrder, Customer, Settings, PaymentReminder, PaymentReminderFrequency, Dispatch } from '../types';
-import { getOrders, getPayments, getExpenses, getPurchases, getCustomers, getSettings, deleteExpense, getPaymentReminders, savePaymentReminder, updateCustomer, getDispatches } from '../services/db';
+import { Order, Payment, Expense, PurchaseOrder, Customer, Settings, PaymentReminder, PaymentReminderFrequency, Dispatch, FinanceTransaction } from '../types';
+import { getOrders, getPayments, getExpenses, getPurchases, getCustomers, getSettings, deleteExpense, getPaymentReminders, savePaymentReminder, updateCustomer, getDispatches, getFinanceTransactions } from '../services/db';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import {
@@ -125,6 +125,7 @@ export const Finance: React.FC<FinanceProps> = ({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [reminders, setReminders] = useState<PaymentReminder[]>([]);
+  const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
   const [activeTab, setActiveTab] = useState<'sales' | 'purchase' | 'dispatch' | 'expenses'>('sales');
   const [salesView, setSalesView] = useState<'orders' | 'payments' | 'reminders' | 'party' | 'ledger'>('ledger');
   const [purchaseView, setPurchaseView] = useState<'bills' | 'payments' | 'party'>('bills');
@@ -182,7 +183,7 @@ export const Finance: React.FC<FinanceProps> = ({
   const loadFinanceData = async () => {
     setLoading(true);
     try {
-      const [ordList, pymtList, expList, purchaseList, customerList, settingsData, reminderList, dispatchList] = await Promise.all([
+      const [ordList, pymtList, expList, purchaseList, customerList, settingsData, reminderList, dispatchList, financeTxList] = await Promise.all([
         getOrders(),
         getPayments(),
         getExpenses(),
@@ -190,7 +191,8 @@ export const Finance: React.FC<FinanceProps> = ({
         getCustomers(),
         getSettings(),
         getPaymentReminders(),
-        getDispatches()
+        getDispatches(),
+        getFinanceTransactions()
       ]);
       setOrders(ordList);
       setPayments(pymtList);
@@ -200,6 +202,7 @@ export const Finance: React.FC<FinanceProps> = ({
       setCustomers(customerList);
       setSettings(settingsData);
       setReminders(reminderList);
+      setFinanceTransactions(financeTxList);
       setSelectedPartyId((current) => current || customerList[0]?.id || purchaseList[0]?.supplierName || '');
     } catch (e) {
       console.error('Error loading finance data:', e);

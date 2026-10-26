@@ -40,8 +40,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [quantityProduced, setQuantityProduced] = useState('');
   const [materialUnit, setMaterialUnit] = useState('');
-  const [wastage1, setWastage1] = useState('');
-  const [wastage2, setWastage2] = useState('');
   const [date, setDate] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,8 +71,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setQuantityProduced('');
-      setWastage1('');
-      setWastage2('');
       setDate('');
       setNotes('');
       setCustomProductType('');
@@ -211,13 +207,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const selectedMaterial = materials.find((material) => material.id === selectedMaterialId);
   const materialStock = selectedMaterial ? getStockInBothUnits(selectedMaterial) : null;
   const parsedQuantityProduced = Number(quantityProduced) || 0;
-  const wastage1Number = Number(wastage1) || 0;
-  const wastage2Number = Number(wastage2) || 0;
-  // Wastage is piece counts
-  const wastage1Quantity = wastage1Number;
-  const wastage2Quantity = wastage2Number;
-  // Calculate net production pieces
-  const netPieces = parsedQuantityProduced - wastage1Number - wastage2Number;
   // Convert quantity to material's base unit for stock deduction
   const materialBaseQuantity = selectedMaterial && parsedQuantityProduced > 0
     ? toBaseQuantity(parsedQuantityProduced, selectedProduct?.unit || 'pcs', selectedMaterial)
@@ -262,23 +251,6 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       setError('Please select the raw material used for this production.');
       return;
     }
-    if (wastage1Number < 0 || wastage2Number < 0) {
-      setError('Wastage values cannot be negative.');
-      return;
-    }
-    if (wastage1Number > 0 && !Number.isInteger(wastage1Number)) {
-      setError('Wastage 1 must be a whole number (pieces).');
-      return;
-    }
-    if (wastage2Number > 0 && !Number.isInteger(wastage2Number)) {
-      setError('Wastage 2 must be a whole number (pieces).');
-      return;
-    }
-    // Validate that net pieces is not negative
-    if (netPieces < 0) {
-      setError(`Wastage (${wastage1Number + wastage2Number} pieces) cannot exceed total production (${parsedQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pieces).`);
-      return;
-    }
     if (materialBaseQuantity > selectedMaterial.currentStock) {
       setError(`Insufficient stock. Available: ${formatQuantityWithUnit(materialStock?.baseQuantity, materialStock?.baseUnit)}.`);
       return;
@@ -294,15 +266,13 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         materialName: selectedMaterial.name,
         quantity: materialQuantity,
         unit: materialUnit,
-        wastage1: wastage1Quantity > 0 ? wastage1Quantity : undefined,
-        wastage2: wastage2Quantity > 0 ? wastage2Quantity : undefined,
         baseQuantity: materialBaseQuantity,
         baseUnit: selectedMaterial.baseUnit,
         equivalentPieces: equivalentPieces || undefined,
         totalDeduction: materialQuantity,
         date: productionDate,
         productionBatch: batch,
-        notes: `Consumed for ${selectedProduct.name} production. Wastage: ${wastage1Quantity + wastage2Quantity} pieces`
+        notes: `Consumed for ${selectedProduct.name} production.`
       });
       await addFinishedGoodsLog({
         productId: selectedProduct.id,
@@ -312,8 +282,7 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
         unit: selectedProduct.unit || 'pcs',
         date: productionDate,
         source: 'Production',
-        notes: notes.trim(),
-        wastagePieces: wastage1Number + wastage2Number > 0 ? wastage1Number + wastage2Number : undefined
+        notes: notes.trim()
       });
 
       onStockAdded?.();
@@ -472,24 +441,8 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
           </select>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="form-label">Wastage 1 (Pieces, Optional)</label>
-            <input type="number" min={0} step="1" value={wastage1} onChange={(e) => setWastage1(e.target.value)} className="form-input" />
-          </div>
-          <div>
-            <label className="form-label">Wastage 2 (Pieces, Optional)</label>
-            <input type="number" min={0} step="1" value={wastage2} onChange={(e) => setWastage2(e.target.value)} className="form-input" />
-          </div>
-        </div>
-
         {selectedMaterial && parsedQuantityProduced > 0 && (
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex flex-wrap gap-4">
-            <span>
-              Net quantity calculation: <strong>
-                {parsedQuantityProduced.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pcs - {wastage1Number.toLocaleString('en-IN')} pcs - {wastage2Number.toLocaleString('en-IN')} pcs = {netPieces.toLocaleString('en-IN', { maximumFractionDigits: 0 })} pcs
-              </strong>
-            </span>
             <span>Stock deduction: <strong>{formatQuantityWithUnit(materialBaseQuantity, selectedMaterial.baseUnit)}</strong></span>
             {equivalentPieces !== undefined && equivalentPieces > 0 && (
               <span>Equivalent pieces: <strong>{formatQuantityWithUnit(equivalentPieces, 'pcs')}</strong></span>

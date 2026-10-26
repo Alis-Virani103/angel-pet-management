@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { auth, db, storage, isLiveFirebaseConfigured } from '../firebase/config';
+import type { FinanceTransaction } from '../types';
 
 // Helper to check if Firebase sync should be attempted
 const shouldSyncToFirebase = (): boolean => {
@@ -111,6 +112,7 @@ const initialRawMaterialUsage: RawMaterialUsage[] = [];
 const initialFinishedGoodsLogs: FinishedGoodsLog[] = [];
 const initialDocuments: DocumentItem[] = [];
 const initialPurchases: PurchaseOrder[] = [];
+const initialFinanceTransactions: FinanceTransaction[] = [];
 const initialSettings: Settings = {
   companyName: '',
   gstin: '',
@@ -139,7 +141,8 @@ const STORAGE_KEYS = {
   SETTINGS: 'angel_pet_settings',
   PURCHASES: 'angel_pet_purchases',
   PURCHASED_MATERIALS: 'angel_pet_purchased_materials',
-  PAYMENT_REMINDERS: 'angel_pet_payment_reminders'
+  PAYMENT_REMINDERS: 'angel_pet_payment_reminders',
+  FINANCE_TRANSACTIONS: 'angel_pet_finance_transactions'
 };
 
 const DEMO_DATA_STORAGE_KEYS = [
@@ -156,7 +159,8 @@ const DEMO_DATA_STORAGE_KEYS = [
   STORAGE_KEYS.SETTINGS,
   STORAGE_KEYS.PURCHASES,
   STORAGE_KEYS.PURCHASED_MATERIALS,
-  STORAGE_KEYS.PAYMENT_REMINDERS
+  STORAGE_KEYS.PAYMENT_REMINDERS,
+  STORAGE_KEYS.FINANCE_TRANSACTIONS
 ];
 
 function clearDemoDataFromLocalStorage(): void {
@@ -688,6 +692,25 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
     if (shouldSyncToFirebase()) {
       await persistCloudWrite(setDoc(doc(getDb(), 'payments', newPayment.id), sanitizeForFirestore(newPayment)), 'Recording cash memo payment');
     }
+
+    // Automatically create FinanceTransaction for Cash Memo sale
+    const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+    const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
+    
+    if (!existingTransactionIds.has(newPayment.id)) {
+      await addFinanceTransaction({
+        transactionType: 'customer_payment',
+        amount: newPayment.amount, // Positive for money received
+        party: newPayment.customerName || newOrder.customerName || newOrder.companyName || 'Customer',
+        partyType: 'customer',
+        referenceId: newPayment.id,
+        referenceNumber: newPayment.receiptNumber,
+        transactionDate: newPayment.paymentDate,
+        description: `Cash Memo payment - ${newOrder.orderNumber}`,
+        paymentMethod: newPayment.paymentMethod,
+        notes: newPayment.notes
+      });
+    }
   }
 
   return newOrder;
@@ -1134,6 +1157,25 @@ export async function addPayment(
     );
     setLocalItem(STORAGE_KEYS.ORDERS, updatedOrders);
 
+    // Automatically create FinanceTransaction for customer payment
+    const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+    const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
+    
+    if (!existingTransactionIds.has(newPayment.id)) {
+      await addFinanceTransaction({
+        transactionType: 'customer_payment',
+        amount: newPayment.amount, // Positive for money received
+        party: newPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer',
+        partyType: 'customer',
+        referenceId: newPayment.id,
+        referenceNumber: newPayment.receiptNumber,
+        transactionDate: newPayment.paymentDate,
+        description: `Payment received against ${targetOrder.orderNumber}`,
+        paymentMethod: newPayment.paymentMethod,
+        notes: newPayment.notes
+      });
+    }
+
     return newPayment;
   }
 
@@ -1224,6 +1266,29 @@ export async function addPayment(
     )
   );
 
+  // Automatically create FinanceTransaction for customer payment
+  // Check if a transaction for this payment already exists to prevent duplicates
+  const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+  const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
+  
+  if (!existingTransactionIds.has(finalPayment.id)) {
+    const targetOrder = orderList.find((o) => o.id === targetOrderId);
+    if (targetOrder) {
+      await addFinanceTransaction({
+        transactionType: 'customer_payment',
+        amount: finalPayment.amount, // Positive for money received
+        party: finalPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer',
+        partyType: 'customer',
+        referenceId: finalPayment.id,
+        referenceNumber: finalPayment.receiptNumber,
+        transactionDate: finalPayment.paymentDate,
+        description: `Payment received against ${targetOrder.orderNumber}`,
+        paymentMethod: finalPayment.paymentMethod,
+        notes: finalPayment.notes
+      });
+    }
+  }
+
   return finalPayment;
 }
 
@@ -1286,6 +1351,26 @@ export async function addExpense(data: Omit<Expense, 'id'>): Promise<Expense> {
     await persistCloudWrite(setDoc(doc(getDb(), 'expenses', id), newExpense), 'Adding expense');
   }
 
+  // Automatically create FinanceTransaction for paid expenses
+  if (newExpense.status === 'paid') {
+    const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+    const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
+    
+    if (!existingTransactionIds.has(newExpense.id)) {
+      await addFinanceTransaction({
+        transactionType: 'expense',
+        amount: -newExpense.amount, // Negative for money paid
+        party: '—',
+        partyType: 'expense',
+        referenceId: newExpense.id,
+        transactionDate: newExpense.expenseDate,
+        description: newExpense.description || 'Business Expense',
+        category: newExpense.category,
+        paymentMethod: newExpense.paymentMethod
+      });
+    }
+  }
+
   return newExpense;
 }
 
@@ -1298,6 +1383,58 @@ export async function deleteExpense(id: string): Promise<void> {
   if (shouldSyncToFirebase()) {
     await persistCloudWrite(deleteDoc(doc(getDb(), 'expenses', id)), 'Deleting expense');
   }
+}
+
+// ================= FINANCE TRANSACTIONS =================
+export async function getFinanceTransactions(): Promise<FinanceTransaction[]> {
+  await requirePermission('finance', 'view');
+  const items = dedupeById(await getCloudItems<FinanceTransaction>('financeTransactions'));
+  setLocalItem(STORAGE_KEYS.FINANCE_TRANSACTIONS, items);
+  return items;
+}
+
+export async function addFinanceTransaction(data: Omit<FinanceTransaction, 'id' | 'createdAt'>): Promise<FinanceTransaction> {
+  await requirePermission('finance', 'create');
+  const id = `FTX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const newTransaction: FinanceTransaction = {
+    ...data,
+    id,
+    createdAt: new Date().toISOString()
+  };
+
+  const list = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+  const existing = list.find((t) => t.id === id);
+  if (existing) {
+    return existing;
+  }
+  setLocalItem(STORAGE_KEYS.FINANCE_TRANSACTIONS, [newTransaction, ...list]);
+
+  if (shouldSyncToFirebase()) {
+    await persistCloudWrite(setDoc(doc(getDb(), 'financeTransactions', id), sanitizeForFirestore(newTransaction)), 'Adding finance transaction');
+  }
+
+  return newTransaction;
+}
+
+export async function deleteFinanceTransaction(id: string): Promise<void> {
+  await requirePermission('finance', 'delete');
+  const list = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+  const newList = list.filter((item) => item.id !== id);
+  setLocalItem(STORAGE_KEYS.FINANCE_TRANSACTIONS, newList);
+
+  if (shouldSyncToFirebase()) {
+    await persistCloudWrite(deleteDoc(doc(getDb(), 'financeTransactions', id)), 'Deleting finance transaction');
+  }
+}
+
+// Helper to create a unique transaction ID based on reference to prevent duplicates
+function createTransactionId(prefix: string, referenceId: string, existingIds: Set<string>): string {
+  const baseId = `${prefix}-${referenceId}`;
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+  // If duplicate exists, append a timestamp
+  return `${baseId}-${Date.now()}`;
 }
 
 // ================= RAW MATERIALS & USAGE =================
@@ -1654,6 +1791,7 @@ export async function recordPurchasePayment(id: string, amount: number, paymentD
   const newPaymentStatus: PurchasePaymentStatus =
     newPaidAmount >= target.totalAmount ? 'paid' : 'partially_paid';
 
+  const paymentId = `PAY-${Date.now()}`;
   const updated: PurchaseOrder = {
     ...target,
     paidAmount: newPaidAmount,
@@ -1661,7 +1799,7 @@ export async function recordPurchasePayment(id: string, amount: number, paymentD
     paymentRecords: [
       ...(target.paymentRecords || []),
       {
-        id: `PAY-${Date.now()}`,
+        id: paymentId,
         purchaseId: target.id,
         purchaseNumber: target.purchaseNumber,
         supplierName: target.supplierName,
@@ -1685,6 +1823,24 @@ export async function recordPurchasePayment(id: string, amount: number, paymentD
       ),
       'Recording purchase payment'
     );
+  }
+
+  // Automatically create FinanceTransaction for supplier payment
+  const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
+  const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
+  
+  if (!existingTransactionIds.has(paymentId)) {
+    await addFinanceTransaction({
+      transactionType: 'supplier_payment',
+      amount: -amount, // Negative for money paid
+      party: target.supplierName || 'Supplier',
+      partyType: 'supplier',
+      referenceId: paymentId,
+      referenceNumber: target.purchaseNumber,
+      transactionDate: paymentDate,
+      description: `Payment to supplier against ${target.purchaseNumber}`,
+      notes: notes
+    });
   }
 
   return updated;
@@ -1723,8 +1879,19 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
     if (material) {
       // Inventory is stored in base units, while purchase lines may use bags,
       // packets, cartons, or pieces.
-      const quantityToAdd = getReceivedPurchaseBaseQuantity(item, material);
-      
+      // If netAvailablePieces is provided (meaning wastage was entered), use it for materials tracking in pieces
+      let quantityToAdd: number;
+      if (item.netAvailablePieces !== undefined && item.netAvailablePieces > 0 && material.baseUnit === 'pcs') {
+        // Material tracks stock in pieces, use net available pieces directly
+        quantityToAdd = item.netAvailablePieces;
+      } else if (item.netAvailablePieces !== undefined && item.netAvailablePieces > 0 && material.piecesPerBaseUnit && material.piecesPerBaseUnit > 0) {
+        // Material tracks stock in weight but has pieces conversion, convert net pieces to base unit
+        quantityToAdd = item.netAvailablePieces / material.piecesPerBaseUnit;
+      } else {
+        // No wastage or material doesn't support pieces, use standard conversion
+        quantityToAdd = getReceivedPurchaseBaseQuantity(item, material);
+      }
+
       const previousAddition = additionsByMaterial.get(material.id) || 0;
       const totalAddition = previousAddition + quantityToAdd;
       const newStock = material.currentStock + totalAddition;
