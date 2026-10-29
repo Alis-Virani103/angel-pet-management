@@ -35,6 +35,12 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
 }) => {
   const { t } = useTranslation();
   const { can } = useAuth();
+
+  // Format currency as rounded whole Indian rupees without decimal places
+  const formatCurrency = (value: number | undefined | null) => {
+    const num = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  };
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -298,7 +304,7 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </td>
                       <td className="py-3.5 px-4 font-semibold">{totalQty.toLocaleString()}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        ₹{order.totalAmount.toLocaleString()}
+                        {formatCurrency(order.totalAmount)}
                       </td>
                       <td className="py-3.5 px-4">
                         {isAS ? (

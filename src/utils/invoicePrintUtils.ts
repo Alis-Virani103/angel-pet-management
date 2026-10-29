@@ -63,6 +63,85 @@ export interface ExpandedInvoiceItem {
 }
 
 /**
+ * Consolidates duplicate order items into single line items.
+ * Only merges items that are truly identical in all meaningful aspects:
+ * - Same product
+ * - Same unit price
+ * - Same combo configuration (inner/cap selections)
+ * - Same packaging mode
+ * - Same price category
+ * - Same selling mode (packet vs pieces)
+ * 
+ * This preserves original order data while presenting a cleaner invoice.
+ */
+export function consolidateDuplicateItems(items: OrderItem[]): OrderItem[] {
+  if (items.length === 0) return items;
+
+  // Create a consolidation key for each item
+  const getConsolidationKey = (item: OrderItem): string => {
+    const parts = [
+      item.productId,
+      item.unitPrice.toString(),
+      item.priceCategory,
+      item.packagingMode,
+      item.selectedInnerId || '',
+      item.selectedCapId || '',
+      item.soldByPacket ? 'packet' : 'pieces',
+      item.unitsPerPacket?.toString() || ''
+    ];
+    return parts.join('||');
+  };
+
+  // Group items by consolidation key
+  const grouped = new Map<string, OrderItem[]>();
+  items.forEach((item) => {
+    const key = getConsolidationKey(item);
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key)!.push(item);
+  });
+
+  // Consolidate each group
+  const consolidated: OrderItem[] = [];
+  grouped.forEach((groupItems) => {
+    if (groupItems.length === 1) {
+      // No consolidation needed
+      consolidated.push(groupItems[0]);
+      return;
+    }
+
+    // Merge quantities
+    const totalQuantity = groupItems.reduce((sum, item) => sum + item.quantity, 0);
+    const totalSubtotal = groupItems.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    // Use the first item as the base and merge
+    const baseItem = groupItems[0];
+    const mergedItem: OrderItem = {
+      ...baseItem,
+      quantity: totalQuantity,
+      subtotal: Number(totalSubtotal.toFixed(2)),
+      // If items were sold by packet, consolidate packet counts and loose pieces
+      soldByPacket: baseItem.soldByPacket,
+      packetCount: baseItem.soldByPacket 
+        ? groupItems.reduce((sum, item) => sum + (item.packetCount || 0), 0)
+        : undefined,
+      loosePieces: baseItem.soldByPacket
+        ? groupItems.reduce((sum, item) => sum + (item.loosePieces || 0), 0)
+        : undefined,
+      // Recalculate weight if any
+      totalWeightGrams: baseItem.totalWeightGrams 
+        ? groupItems.reduce((sum, item) => sum + (item.totalWeightGrams || 0), 0)
+        : undefined
+    };
+
+    consolidated.push(mergedItem);
+  });
+
+  return consolidated;
+}
+
+/**
  * Expands combo items into separate sequential line items:
  * 1. Bottle (Main product with combo pricing rate and its own individual weight)
  * 2. Inner (if selected, with quantity and weight fetched from Product Master, price marked as '-')
@@ -285,7 +364,9 @@ export function generateInvoiceHtml(
 
   const customerGstin = isGst ? customer?.gstin : undefined;
 
-  const expandedItems = expandComboItems(order.items, products);
+  // Consolidate duplicate items before expanding combos
+  const consolidatedItems = consolidateDuplicateItems(order.items);
+  const expandedItems = expandComboItems(consolidatedItems, products);
 
   const hasAnyWeightInOrder =
     (typeof order.totalWeightGrams === 'number' && order.totalWeightGrams > 0) ||
