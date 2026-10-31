@@ -271,7 +271,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               const pending = Math.max(0, o.totalAmount - o.paidAmount);
               return (
                 <option key={o.id} value={o.id}>
-                  {o.orderNumber} — {o.companyName} (Pending: ₹{pending.toLocaleString()})
+                  {o.orderNumber} — {o.customerName} (Pending: ₹{pending.toLocaleString()})
                 </option>
               );
             })}
@@ -282,7 +282,7 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
           <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1 text-xs text-slate-700">
             <div className="flex justify-between">
               <span>Customer:</span>
-              <span className="font-semibold">{selectedOrder.companyName}</span>
+              <span className="font-semibold">{selectedOrder.customerName}</span>
             </div>
             <div className="flex justify-between">
               <span>Order Total Amount:</span>
