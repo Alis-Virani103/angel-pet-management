@@ -16,10 +16,12 @@ import {
   Layers,
   Trash2,
   Clock,
-  Building2
+  Building2,
+  Camera
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { EditPurchaseItemsModal } from '../components/modals/EditPurchaseItemsModal';
+import { PurchasePhotosModal } from '../components/modals/PurchasePhotosModal';
 import { useAuth } from '../auth/AuthContext';
 
 interface PurchasesProps {
@@ -42,6 +44,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [purchaseToEdit, setPurchaseToEdit] = useState<PurchaseOrder | null>(null);
+  const [purchaseForPhotos, setPurchaseForPhotos] = useState<PurchaseOrder | null>(null);
 
   useEffect(() => {
     loadPurchasesData();
@@ -256,7 +259,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
                 <th className="py-3.5 px-4">Total Amount</th>
                 <th className="py-3.5 px-4">Payment</th>
                 <th className="py-3.5 px-4">Stock Status</th>
-                <th className="sticky right-0 z-20 w-44 bg-slate-50 py-3.5 px-4 text-center">Actions</th>
+                <th className="sticky right-0 z-20 w-56 bg-slate-50 py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -317,7 +320,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
                           </span>
                         )}
                       </td>
-                      <td className="sticky right-0 z-10 w-44 bg-white py-3.5 px-4 group-hover:bg-slate-50">
+                      <td className="sticky right-0 z-10 w-56 bg-white py-3.5 px-4 group-hover:bg-slate-50">
                         <div className="grid grid-cols-2 gap-1.5">
                           <Link
                             to={`/purchases/${po.id}`}
@@ -328,6 +331,16 @@ export const Purchases: React.FC<PurchasesProps> = ({
                             <Eye className="w-4 h-4 shrink-0" />
                             <span>View</span>
                           </Link>
+
+                          <button
+                            onClick={() => setPurchaseForPhotos(po)}
+                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-slate-50 px-2 text-[10px] font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            title="Manage Photos"
+                            aria-label={`Manage photos for purchase ${po.purchaseNumber}`}
+                          >
+                            <Camera className="w-4 h-4 shrink-0" />
+                            <span>Photos</span>
+                          </button>
 
                           {can('purchases', 'edit') && <button
                             onClick={() => setPurchaseToEdit(po)}
@@ -393,6 +406,15 @@ export const Purchases: React.FC<PurchasesProps> = ({
               current.map((purchase) => purchase.id === updatedPurchase.id ? updatedPurchase : purchase)
             );
           }}
+        />
+      )}
+
+      {purchaseForPhotos && (
+        <PurchasePhotosModal
+          isOpen
+          purchase={purchaseForPhotos}
+          onClose={() => setPurchaseForPhotos(null)}
+          onPhotosUpdated={loadPurchasesData}
         />
       )}
     </div>

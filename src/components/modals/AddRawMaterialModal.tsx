@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory } from '../../types';
-import { addRawMaterial, updateRawMaterial } from '../../services/db';
+import { addRawMaterial, updateRawMaterial, getCustomCategories, addCustomCategory } from '../../services/db';
 import { cleanDecimalInput } from '../../utils/packetUtils';
-import { Layers, AlertCircle } from 'lucide-react';
+import { Layers, AlertCircle, Plus } from 'lucide-react';
 
 interface AddRawMaterialModalProps {
   isOpen: boolean;
@@ -21,6 +21,9 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [category, setCategory] = useState<RawMaterialCategory>('granules');
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [currentStock, setCurrentStock] = useState<number | string>(1000);
   const [minimumStock, setMinimumStock] = useState<number | string>(500);
   const [unit, setUnit] = useState('kg');
@@ -33,9 +36,11 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
   const [supplier, setSupplier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [categoryError, setCategoryError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
+      loadCustomCategories();
       if (initialMaterial) {
         setName(initialMaterial.name || '');
         setCode(initialMaterial.code || '');
@@ -66,8 +71,38 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
         setSupplier('');
       }
       setError('');
+      setCategoryError('');
+      setIsAddingNewCategory(false);
+      setNewCategoryName('');
     }
   }, [isOpen, initialMaterial]);
+
+  const loadCustomCategories = async () => {
+    try {
+      const categories = await getCustomCategories();
+      setCustomCategories(categories);
+    } catch (err) {
+      console.error('Failed to load custom categories:', err);
+    }
+  };
+
+  const handleAddNewCategory = async () => {
+    setCategoryError('');
+    if (!newCategoryName.trim()) {
+      setCategoryError('Please enter a category name');
+      return;
+    }
+
+    try {
+      const addedCategory = await addCustomCategory(newCategoryName);
+      setCategory(addedCategory as RawMaterialCategory);
+      setCustomCategories([...customCategories, addedCategory]);
+      setIsAddingNewCategory(false);
+      setNewCategoryName('');
+    } catch (err) {
+      setCategoryError(err instanceof Error ? err.message : 'Failed to add category');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,16 +188,69 @@ export const AddRawMaterialModal: React.FC<AddRawMaterialModalProps> = ({
 
           <div>
             <label className="form-label">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as RawMaterialCategory)}
-              className="form-select"
-            >
-              <option value="granules">Plastic Polymers / Granules</option>
-              <option value="masterbatch">Masterbatch</option>
-              <option value="colour">Colours & Dyes</option>
-              <option value="packaging">Packaging Consumables</option>
-            </select>
+            {isAddingNewCategory ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter new category name"
+                  className="form-input flex-1"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleAddNewCategory}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingNewCategory(false);
+                    setNewCategoryName('');
+                    setCategoryError('');
+                  }}
+                  className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <select
+                value={category}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '__add_new__') {
+                    setIsAddingNewCategory(true);
+                  } else {
+                    setCategory(value as RawMaterialCategory);
+                  }
+                }}
+                className="form-select"
+              >
+                <option value="granules">Plastic Polymers / Granules</option>
+                <option value="masterbatch">Masterbatch</option>
+                <option value="colour">Colours & Dyes</option>
+                <option value="packaging">Packaging Consumables</option>
+                {customCategories.length > 0 && (
+                  <optgroup label="Custom Categories">
+                    {customCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="__add_new__" className="font-semibold text-blue-600">
+                  + Add New Category
+                </option>
+              </select>
+            )}
+            {categoryError && (
+              <p className="text-[10px] text-rose-600 mt-1">{categoryError}</p>
+            )}
           </div>
         </div>
 

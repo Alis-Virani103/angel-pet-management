@@ -423,15 +423,19 @@ export function generateInvoiceHtml(
           <td style="padding: 6px 8px; color: #0f172a; font-weight: 600; font-size: 10px; vertical-align: middle;">
             <div>${displayTitle}${itemBadge}${autoLinkedBadge}</div>
             ${packagingInfo}
-            <div style="font-size: 8px; color: #94a3b8; font-weight: 400; margin-top: 1px;">Category ${item.priceCategory} Pricing</div>
+            ${!isChallan ? `<div style="font-size: 8px; color: #94a3b8; font-weight: 400; margin-top: 1px;">Category ${item.priceCategory} Pricing</div>` : ''}
           </td>
           <td style="padding: 6px 8px; text-align: center; color: #475569; font-size: 9.5px; text-transform: capitalize; vertical-align: middle;">${item.productType}</td>
           <td style="padding: 6px 8px; text-align: center; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${qtyDisplay}</td>
-          <td style="padding: 6px 8px; text-align: right; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${rateDisplay}</td>
+          ${!isChallan ? `
+            <td style="padding: 6px 8px; text-align: right; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${rateDisplay}</td>
+          ` : ''}
           ${hasAnyWeightInOrder ? `
             <td style="padding: 6px 8px; text-align: center; color: #475569; font-size: 9.5px; vertical-align: middle;">${weightDisplay || '-'}</td>
           ` : ''}
-          <td style="padding: 6px 8px; text-align: right; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${subtotalDisplay}</td>
+          ${!isChallan ? `
+            <td style="padding: 6px 8px; text-align: right; font-weight: 600; color: #0f172a; font-size: 9.5px; vertical-align: middle;">${subtotalDisplay}</td>
+          ` : ''}
         </tr>
       `;
     })
@@ -482,57 +486,12 @@ export function generateInvoiceHtml(
 </head>
 <body>
   <div class="page">
-    <!-- HEADER -->
+    <!-- HEADER - REMOVED company branding and invoice metadata per user request -->
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
       <tbody>
         <tr>
-          <!-- LEFT: Company Branding -->
-          <td style="vertical-align: top; width: 55%;">
-            ${!isChallan && isGst ? `
-              ${companyName ? `<div style="font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; line-height: 1.2;">${companyName}</div>` : ''}
-              ${(companyAddress || companyPhone || companyEmail) ? `<div style="font-size: 9px; color: #475569; line-height: 1.5; margin-top: 4px;">
-                ${companyAddress ? `<div>${companyAddress}</div>` : ''}
-                ${(companyPhone || companyEmail) ? `<div>${companyPhone ? `Tel: ${companyPhone}` : ''}${companyPhone && companyEmail ? ' &nbsp;|&nbsp; ' : ''}${companyEmail ? `Email: ${companyEmail}` : ''}</div>` : ''}
-                ${companyGstin ? `<div style="font-weight: 700; color: #0f172a; margin-top: 2px;">GSTIN: ${companyGstin}</div>` : ''}
-              </div>` : ''}
-            ` : `
-              <!-- Minimal header for non-GST bills or challans -->
-              <div style="font-size: 14px; font-weight: 700; color: #475569;">
-                ${isChallan ? 'Delivery Challan' : 'Delivery Estimate / Kachha Bill'}
-              </div>
-            `}
-          </td>
-
-          <!-- RIGHT: Invoice Title & Meta Details -->
-          <td style="vertical-align: top; width: 45%; text-align: right;">
-            <div style="font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px; text-transform: uppercase;">
-              ${titleText}
-            </div>
-            <div style="margin-top: 2px;">
-              <span style="display: inline-block; background: #f1f5f9; color: #334155; font-size: 8.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px;">
-                ${memoLabel}
-              </span>
-            </div>
-            <div style="margin-top: 6px; display: inline-block; text-align: right;">
-              <table style="font-size: 9.5px; border-collapse: collapse; margin-left: auto;">
-                <tbody>
-                  ${!isChallan ? `
-                  <tr>
-                    <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">${isAS ? 'Order No:' : isGst ? 'Invoice No:' : 'Bill No:'}</td>
-                    <td style="font-weight: 700; color: #0f172a; padding: 1.5px 0; text-align: right;">${order.orderNumber}</td>
-                  </tr>
-                  ` : ''}
-                  <tr>
-                    <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">Date:</td>
-                    <td style="font-weight: 600; color: #0f172a; padding: 1.5px 0; text-align: right;">${formatInvoiceDate(order.orderDate)}</td>
-                  </tr>
-                  <tr>
-                    <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">Status:</td>
-                    <td style="font-weight: 600; text-transform: capitalize; color: #334155; padding: 1.5px 0; text-align: right;">${order.orderStatus}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <td style="vertical-align: top; width: 100%;">
+            <!-- Empty header space -->
           </td>
         </tr>
       </tbody>
@@ -563,11 +522,15 @@ export function generateInvoiceHtml(
           <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: left;">Description / Product</th>
           <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: center; width: 9%;">Type</th>
           <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: center; width: 12%;">Qty</th>
-          <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: right; width: 12%;">Unit Rate (₹)</th>
+          ${!isChallan ? `
+            <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: right; width: 12%;">Unit Rate (₹)</th>
+          ` : ''}
           ${hasAnyWeightInOrder ? `
             <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: center; width: 11%;">Weight</th>
           ` : ''}
-          <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: right; width: 14%;">${isGst ? 'Taxable Amount (₹)' : 'Amount (₹)'}</th>
+          ${!isChallan ? `
+            <th style="color: #475569; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; padding: 6px 8px; text-align: right; width: 14%;">${isGst ? 'Taxable Amount (₹)' : 'Amount (₹)'}</th>
+          ` : ''}
         </tr>
       </thead>
       <tbody>
@@ -580,12 +543,10 @@ export function generateInvoiceHtml(
       <tbody>
         <tr>
           <!-- Left: notes, logistics & terms -->
-          <td style="vertical-align: top; width: 50%; padding-right: 16px;">
+          <td style="vertical-align: top; width: ${isChallan ? '100%' : '50%'}; padding-right: 16px;">
             <div style="font-size: 9px; color: #475569; line-height: 1.5; margin-bottom: 6px;">
               <div><strong>Total Quantity:</strong> ${formatNumberDisplay(totalPieces)} pcs</div>
-              ${hasAnyWeightInOrder && totalOrderWeightDisplay ? `
-                <div style="margin-top: 1px;"><strong>Total Weight:</strong> ${totalOrderWeightDisplay}</div>
-              ` : ''}
+              <!-- Total Weight removed per user request -->
             </div>
             ${order.notes ? `
               <div style="background: #f8fafc; border-left: 3px solid #cbd5e1; padding: 5px 8px; font-size: 8.5px; color: #475569; margin-bottom: 6px;">
@@ -600,73 +561,74 @@ export function generateInvoiceHtml(
             </div>
           </td>
 
-          <!-- Right: Calculation summary -->
-          <td style="vertical-align: top; width: 50%;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
-              <tbody>
-                <tr>
-                  <td style="padding: 3px 6px; color: #475569;">${isGst ? 'Subtotal (Taxable):' : 'Subtotal:'}</td>
-                  <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${order.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-                ${isGst && order.gstRate > 0 && order.gstAmount > 0 ? `
+          ${!isChallan ? `
+            <!-- Right: Calculation summary -->
+            <td style="vertical-align: top; width: 50%;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <tbody>
                   <tr>
-                    <td style="padding: 3px 6px; color: #475569;">CGST (${order.gstRate / 2}%):</td>
-                    <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${(order.gstAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style="padding: 3px 6px; color: #475569;">${isGst ? 'Subtotal (Taxable):' : 'Subtotal:'}</td>
+                    <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${order.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                  ${isGst && order.gstRate > 0 && order.gstAmount > 0 ? `
+                    <tr>
+                      <td style="padding: 3px 6px; color: #475569;">CGST (${order.gstRate / 2}%):</td>
+                      <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${(order.gstAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 3px 6px; color: #475569;">SGST (${order.gstRate / 2}%):</td>
+                      <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${(order.gstAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ` : ''}
+                  <tr style="border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a;">
+                    <td style="padding: 5px 6px; color: #0f172a; font-weight: 800; font-size: 11.5px;">Grand Total:</td>
+                    <td style="padding: 5px 6px; text-align: right; color: #0f172a; font-weight: 800; font-size: 11.5px;">₹${order.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>
                   <tr>
-                    <td style="padding: 3px 6px; color: #475569;">SGST (${order.gstRate / 2}%):</td>
-                    <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #0f172a;">₹${(order.gstAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style="padding: 3px 6px; color: #475569;">Amount Received:</td>
+                    <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #16a34a;">₹${order.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>
-                ` : ''}
-                <tr style="border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a;">
-                  <td style="padding: 5px 6px; color: #0f172a; font-weight: 800; font-size: 11.5px;">Grand Total:</td>
-                  <td style="padding: 5px 6px; text-align: right; color: #0f172a; font-weight: 800; font-size: 11.5px;">₹${order.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 3px 6px; color: #475569;">Amount Received:</td>
-                  <td style="padding: 3px 6px; text-align: right; font-weight: 600; color: #16a34a;">₹${order.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-                <tr style="border-top: 1px solid #e2e8f0;">
-                  <td style="padding: 4px 6px; font-weight: 700; color: ${pendingBalance > 0 ? '#b91c1c' : '#15803d'};">
-                    ${pendingBalance > 0 ? 'Balance Due:' : 'Fully Settled ✓'}
-                  </td>
-                  <td style="padding: 4px 6px; text-align: right; font-weight: 700; color: ${pendingBalance > 0 ? '#b91c1c' : '#15803d'};">
-                    ₹${pendingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </td>
+                  <tr style="border-top: 1px solid #e2e8f0;">
+                    <td style="padding: 4px 6px; font-weight: 700; color: ${pendingBalance > 0 ? '#b91c1c' : '#15803d'};">
+                      ${pendingBalance > 0 ? 'Balance Due:' : 'Fully Settled ✓'}
+                    </td>
+                    <td style="padding: 4px 6px; text-align: right; font-weight: 700; color: ${pendingBalance > 0 ? '#b91c1c' : '#15803d'};">
+                      ₹${pendingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          ` : ''}
         </tr>
       </tbody>
     </table>
 
-    <!-- Amount in Words -->
-    <div style="font-size: 9px; color: #334155; padding: 5px 0; border-top: 1px solid #f1f5f9; margin-bottom: 12px;">
-      <strong>Amount in Words:</strong> ${amountInWords(order.totalAmount)}
-    </div>
+    ${!isChallan ? `
+      <!-- Amount in Words -->
+      <div style="font-size: 9px; color: #334155; padding: 5px 0; border-top: 1px solid #f1f5f9; margin-bottom: 12px;">
+        <strong>Amount in Words:</strong> ${amountInWords(order.totalAmount)}
+      </div>
+    ` : ''}
 
-    <!-- Signatory -->
+    <!-- Signatory - REMOVED company name and authorized signatory per user request -->
     <table style="width: 100%; border-collapse: collapse; margin-top: 6px; margin-bottom: 14px;">
       <tbody>
         <tr>
           <td style="width: 50%;"></td>
           <td style="width: 50%; text-align: right;">
-            ${!isChallan && isGst ? `
-              <div style="font-size: 9.5px; font-weight: 700; color: #0f172a; margin-bottom: 30px;">For ${companyName}</div>
-              <div style="font-size: 8.5px; color: #64748b; border-top: 1px solid #cbd5e1; display: inline-block; padding-top: 3px; min-width: 130px; text-align: center;">Authorised Signatory</div>
-            ` : ''}
+            <!-- Signatory section removed -->
           </td>
         </tr>
       </tbody>
     </table>
 
-    <!-- FOOTER -->
+    <!-- FOOTER - REMOVED company details per user request -->
     <div style="border-top: 1px solid #e2e8f0; padding-top: 6px; text-align: center; font-size: 8px; color: #94a3b8;">
       ${isChallan ? `
         This is a computer-generated delivery challan.
       ` : isGst ? `
-        ${companyName} &nbsp;|&nbsp; ${companyAddress} ${companyGstin ? `&nbsp;|&nbsp; GSTIN: ${companyGstin}` : ''} &nbsp;|&nbsp; This is a computer-generated tax invoice.
+        This is a computer-generated tax invoice.
       ` : `
         This is a computer-generated kachha bill.
       `}

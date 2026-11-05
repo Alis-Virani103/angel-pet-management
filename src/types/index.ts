@@ -159,6 +159,14 @@ export interface SignedOrderCopy {
   uploadedAt: string;
 }
 
+export interface PurchasePhoto {
+  id: string;
+  url: string;
+  fileName: string;
+  fileSize: number;
+  uploadedAt: string;
+}
+
 export type OrderType = 'REGULAR' | 'AS';
 
 export interface Order {
@@ -188,6 +196,10 @@ export interface Order {
   paymentType?: 'cash_memo' | 'debit_memo' | 'delivery_challan';
   orderType?: OrderType; // 'REGULAR' by default for backward compatibility
   createdAt?: string; // ISO timestamp for 24-hour visibility rule
+  photos?: PurchasePhoto[];
+  // Multi-challan invoice tracking
+  dispatchIds?: string[]; // IDs of dispatches included in this invoice
+  isConsolidatedInvoice?: boolean; // True if this invoice consolidates multiple challans
 }
 
 export type PaymentDocumentType = 'cash_memo' | 'debit_memo' | 'delivery_challan';
@@ -219,6 +231,9 @@ export interface Dispatch {
   stockDeducted?: boolean;
   notes?: string;
   createdAt: string;
+  // Billing tracking
+  billedQuantity?: number; // Quantity already billed from this dispatch
+  invoiceIds?: string[]; // IDs of invoices that include this dispatch
 }
 
 export type PaymentMethod = 'bank_transfer' | 'upi' | 'cheque' | 'cash';
@@ -277,7 +292,7 @@ export interface FinanceTransaction {
   createdAt: string;
 }
 
-export type RawMaterialCategory = 'granules' | 'masterbatch' | 'colour' | 'packaging';
+export type RawMaterialCategory = 'granules' | 'masterbatch' | 'colour' | 'packaging' | string;
 
 export interface RawMaterial {
   id: string;
@@ -367,6 +382,7 @@ export interface PurchaseItem {
   wastage1Pieces?: number;
   wastage2Pieces?: number;
   netAvailablePieces?: number;
+  pieceRate?: number; // Cost per piece (when material is purchased by weight but sold/used by pieces)
 }
 
 export interface PurchaseOrder {
@@ -388,6 +404,7 @@ export interface PurchaseOrder {
   purchaseDate: string;
   stockAdded?: boolean;
   notes?: string;
+  photos?: PurchasePhoto[];
   createdAt: string;
 }
 

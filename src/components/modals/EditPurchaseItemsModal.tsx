@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal } from '../common/Modal';
 import { PurchaseItem, PurchaseOrder, RawMaterial } from '../../types';
 import { getRawMaterials, updatePurchase } from '../../services/db';
+import { calculateBagPieceConversion } from '../../utils/unitConversion';
 import { AlertCircle, Plus, Save, Trash2 } from 'lucide-react';
 
 interface EditPurchaseItemsModalProps {
@@ -145,6 +146,39 @@ export const EditPurchaseItemsModal: React.FC<EditPurchaseItemsModalProps> = ({
       const quantity = Number(item.quantity) || 0;
       const unitCost = Number(item.unitCost) || 0;
       const previous = purchase.items.find((candidate) => candidate.rawMaterialId === item.rawMaterialId);
+
+      // Determine if we need to recalculate pieceRate
+      let pieceRate = previous?.pieceRate;
+      let netAvailablePieces = previous?.netAvailablePieces;
+      let wastage1Pieces = previous?.wastage1Pieces;
+      let wastage2Pieces = previous?.wastage2Pieces;
+
+      // Recalculate pieceRate if quantity or unitCost changed and we have bag/piece conversion data
+      if (previous?.numberOfBags && previous.weightPerBagKg && previous.weightPerPieceGrams) {
+        const quantityChanged = previous.quantity !== quantity;
+        const unitCostChanged = previous.unitCost !== unitCost;
+
+        if (quantityChanged || unitCostChanged) {
+          // Recalculate conversion
+          const conversion = calculateBagPieceConversion({
+            numberOfBags: previous.numberOfBags,
+            weightPerBagKg: previous.weightPerBagKg,
+            weightPerPieceGrams: previous.weightPerPieceGrams
+          });
+
+          if (!('error' in conversion)) {
+            const totalWastage = (previous.wastage1Pieces || 0) + (previous.wastage2Pieces || 0);
+            const recalculatedNetPieces = Math.max(0, conversion.calculatedPieces - totalWastage);
+            netAvailablePieces = recalculatedNetPieces;
+
+            // Recalculate pieceRate if we have valid net pieces
+            if (recalculatedNetPieces > 0 && quantity > 0) {
+              pieceRate = (quantity * unitCost) / recalculatedNetPieces;
+            }
+          }
+        }
+      }
+
       return {
         rawMaterialId: item.rawMaterialId,
         rawMaterialName: material?.name || 'Unknown material',
@@ -163,7 +197,12 @@ export const EditPurchaseItemsModal: React.FC<EditPurchaseItemsModalProps> = ({
               totalWeightGrams: previous.totalWeightGrams,
               calculatedPieces: previous.calculatedPieces
             }
-          : {})
+          : {}),
+        // Preserve or recalculate wastage and piece rate fields
+        wastage1Pieces,
+        wastage2Pieces,
+        netAvailablePieces,
+        pieceRate
       };
     });
 

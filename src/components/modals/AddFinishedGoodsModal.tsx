@@ -40,6 +40,8 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [quantityProduced, setQuantityProduced] = useState('');
   const [materialUnit, setMaterialUnit] = useState('');
+  const [wastage1Pieces, setWastage1Pieces] = useState('');
+  const [wastage2Pieces, setWastage2Pieces] = useState('');
   const [date, setDate] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -71,6 +73,8 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setQuantityProduced('');
+      setWastage1Pieces('');
+      setWastage2Pieces('');
       setDate('');
       setNotes('');
       setCustomProductType('');
@@ -207,16 +211,24 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
   const selectedMaterial = materials.find((material) => material.id === selectedMaterialId);
   const materialStock = selectedMaterial ? getStockInBothUnits(selectedMaterial) : null;
   const parsedQuantityProduced = Number(quantityProduced) || 0;
-  // Convert quantity to material's base unit for stock deduction
-  const materialBaseQuantity = selectedMaterial && parsedQuantityProduced > 0
-    ? toBaseQuantity(parsedQuantityProduced, selectedProduct?.unit || 'pcs', selectedMaterial)
+  const parsedWastage1 = Number(wastage1Pieces) || 0;
+  const parsedWastage2 = Number(wastage2Pieces) || 0;
+  const totalWastagePieces = parsedWastage1 + parsedWastage2;
+  // Total raw material to consume = finished goods produced + wastage
+  const totalRawMaterialNeeded = parsedQuantityProduced + totalWastagePieces;
+  // Convert total raw material needed to material's base unit for stock deduction
+  const materialBaseQuantity = selectedMaterial && totalRawMaterialNeeded > 0
+    ? toBaseQuantity(totalRawMaterialNeeded, selectedProduct?.unit || 'pcs', selectedMaterial)
     : 0;
   const materialQuantity = selectedMaterial
     ? fromBaseQuantity(materialBaseQuantity, materialUnit, selectedMaterial)
     : 0;
+  // Equivalent pieces from total raw material (what we actually consume)
   const equivalentPieces = selectedMaterial && materialBaseQuantity > 0
     ? calculateEquivalentPieces(materialBaseQuantity, selectedMaterial)
     : undefined;
+  // Total deduction is the total raw material consumed (including wastage)
+  const totalDeductionQuantity = materialQuantity;
 
   const getMaterialUnits = (material: RawMaterial) =>
     Array.from(new Set([material.baseUnit, material.consumptionUnit, material.purchaseUnit].filter(Boolean)));
@@ -251,8 +263,9 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
       setError('Please select the raw material used for this production.');
       return;
     }
+    // Check stock availability including wastage
     if (materialBaseQuantity > selectedMaterial.currentStock) {
-      setError(`Insufficient stock. Available: ${formatQuantityWithUnit(materialStock?.baseQuantity, materialStock?.baseUnit)}.`);
+      setError(`Insufficient stock. Available: ${formatQuantityWithUnit(materialStock?.baseQuantity, materialStock?.baseUnit)}. Required: ${formatQuantityWithUnit(materialBaseQuantity, selectedMaterial.baseUnit)}.`);
       return;
     }
 
@@ -261,24 +274,38 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
     setError('');
     try {
       const batch = notes.trim() || `PROD-${productionDate}`;
+      // Calculate net raw material quantity (without wastage) for record keeping
+      const netMaterialBaseQuantity = selectedMaterial && parsedQuantityProduced > 0
+        ? toBaseQuantity(parsedQuantityProduced, selectedProduct?.unit || 'pcs', selectedMaterial)
+        : 0;
+      const netMaterialQuantity = selectedMaterial
+        ? fromBaseQuantity(netMaterialBaseQuantity, materialUnit, selectedMaterial)
+        : 0;
+      const netEquivalentPieces = selectedMaterial && netMaterialBaseQuantity > 0
+        ? calculateEquivalentPieces(netMaterialBaseQuantity, selectedMaterial)
+        : undefined;
+
       await recordRawMaterialUsage({
         materialId: selectedMaterial.id,
         materialName: selectedMaterial.name,
-        quantity: materialQuantity,
+        quantity: netMaterialQuantity,
         unit: materialUnit,
-        baseQuantity: materialBaseQuantity,
+        baseQuantity: netMaterialBaseQuantity,
         baseUnit: selectedMaterial.baseUnit,
-        equivalentPieces: equivalentPieces || undefined,
-        totalDeduction: materialQuantity,
+        equivalentPieces: netEquivalentPieces || undefined,
+        wastage1: totalWastagePieces > 0 ? parsedWastage1 : undefined,
+        wastage2: totalWastagePieces > 0 ? parsedWastage2 : undefined,
+        totalDeduction: materialQuantity, // Total deduction includes wastage
         date: productionDate,
         productionBatch: batch,
-        notes: `Consumed for ${selectedProduct.name} production.`
+        notes: `Consumed for ${selectedProduct.name} production.${totalWastagePieces > 0 ? ` Wastage: ${totalWastagePieces} pcs.` : ''}`
       });
       await addFinishedGoodsLog({
         productId: selectedProduct.id,
         productName: selectedProduct.name,
         type: productType,
-        quantityProduced: parsedQuantity,
+        quantityProduced: parsedQuantityProduced,
+        wastagePieces: totalWastagePieces > 0 ? totalWastagePieces : undefined,
         unit: selectedProduct.unit || 'pcs',
         date: productionDate,
         source: 'Production',
@@ -443,10 +470,40 @@ export const AddFinishedGoodsModal: React.FC<AddFinishedGoodsModalProps> = ({
 
         {selectedMaterial && parsedQuantityProduced > 0 && (
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex flex-wrap gap-4">
-            <span>Stock deduction: <strong>{formatQuantityWithUnit(materialBaseQuantity, selectedMaterial.baseUnit)}</strong></span>
+            <span>Raw material to consume: <strong>{formatQuantityWithUnit(materialBaseQuantity, selectedMaterial.baseUnit)}</strong></span>
             {equivalentPieces !== undefined && equivalentPieces > 0 && (
               <span>Equivalent pieces: <strong>{formatQuantityWithUnit(equivalentPieces, 'pcs')}</strong></span>
             )}
+            {totalWastagePieces > 0 && (
+              <span className="text-amber-700">Includes wastage: <strong>{totalWastagePieces} pcs</strong></span>
+            )}
+          </div>
+        )}
+
+        {selectedMaterial && equivalentPieces !== undefined && equivalentPieces > 0 && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">Wastage 1 (pieces)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={wastage1Pieces}
+                onChange={(e) => setWastage1Pieces(e.target.value)}
+                className="form-input"
+              />
+            </div>
+            <div>
+              <label className="form-label">Wastage 2 (pieces)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={wastage2Pieces}
+                onChange={(e) => setWastage2Pieces(e.target.value)}
+                className="form-input"
+              />
+            </div>
           </div>
         )}
 

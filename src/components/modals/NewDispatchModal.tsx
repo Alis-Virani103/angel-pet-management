@@ -9,7 +9,7 @@ import { Truck, AlertCircle, CheckCircle2, PackageCheck } from 'lucide-react';
 interface NewDispatchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onDispatchCreated?: () => void;
+  onDispatchCreated?: (dispatch: Dispatch) => void;
   defaultOrderId?: string;
 }
 
@@ -209,7 +209,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
     setLoading(true);
     setError('');
     try {
-      await addDispatch({
+      const savedDispatch = await addDispatch({
         orderId: selectedOrder.id,
         orderNumber: selectedOrder.orderNumber,
         customerName: selectedOrder.companyName || selectedOrder.customerName,
@@ -222,7 +222,7 @@ export const NewDispatchModal: React.FC<NewDispatchModalProps> = ({
         notes: notes.trim()
       });
 
-      if (onDispatchCreated) onDispatchCreated();
+      if (onDispatchCreated) onDispatchCreated(savedDispatch);
       onClose();
     } catch (err) {
       console.error(err);

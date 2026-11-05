@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
-import { Order, PaymentMethod } from '../../types';
-import { getOrders, addPayment, checkPaymentStatus } from '../../services/db';
+import { Order, PaymentMethod, Customer } from '../../types';
+import { getOrders, addPayment, checkPaymentStatus, getCustomers } from '../../services/db';
 import { cleanDecimalInput } from '../../utils/packetUtils';
+import { formatDate } from '../../utils/dateUtils';
 import { IndianRupee, AlertCircle, RefreshCw, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface RecordPaymentModalProps {
@@ -19,6 +20,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   onPaymentRecorded
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedOrderId, setSelectedOrderId] = useState(defaultOrderId || '');
   const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer');
@@ -38,37 +41,52 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       setIsTimedOut(false);
       setSuccessMessage('');
       activeReceiptIdRef.current = null;
-      loadOrders();
+      loadData();
     }
   }, [isOpen]);
 
-  const loadOrders = async () => {
+  const loadData = async () => {
     try {
-      const orderList = await getOrders();
+      const [orderList, customerList] = await Promise.all([getOrders(), getCustomers()]);
       // Filter out Cash Memo and AS orders
       const eligibleOrders = orderList.filter((o) => o.paymentType !== 'cash_memo' && o.orderType !== 'AS');
       setOrders(eligibleOrders);
+      setCustomers(customerList);
 
       if (defaultOrderId) {
         const fullOrder = orderList.find((o) => o.id === defaultOrderId);
         if (fullOrder && fullOrder.orderType === 'AS') {
           setError('Payment not applicable for AS Order.');
           setSelectedOrderId('');
+          setSelectedCustomerId('');
           setAmount('');
           return;
         }
-      }
-
-      const target = defaultOrderId
-        ? eligibleOrders.find((o) => o.id === defaultOrderId)
-        : eligibleOrders.find((o) => o.paymentStatus !== 'paid');
-
-      if (target) {
-        setSelectedOrderId(target.id);
-        const pendingAmount = Math.max(0, target.totalAmount - target.paidAmount);
-        setAmount(pendingAmount > 0 ? String(pendingAmount) : '');
-      } else if (eligibleOrders.length > 0) {
-        setSelectedOrderId(eligibleOrders[0].id);
+        // Set customer based on default order
+        if (fullOrder && fullOrder.customerId) {
+          setSelectedCustomerId(fullOrder.customerId);
+          setSelectedOrderId(fullOrder.id);
+          const pendingAmount = Math.max(0, fullOrder.totalAmount - fullOrder.paidAmount);
+          setAmount(pendingAmount > 0 ? String(pendingAmount) : '');
+        }
+      } else {
+        // Select first customer with outstanding orders
+        const customerWithOutstanding = customerList.find((customer) =>
+          eligibleOrders.some((o) => o.customerId === customer.id && o.paymentStatus !== 'paid')
+        );
+        if (customerWithOutstanding) {
+          setSelectedCustomerId(customerWithOutstanding.id);
+          const customerOrders = eligibleOrders.filter(
+            (o) => o.customerId === customerWithOutstanding.id && o.paymentStatus !== 'paid'
+          );
+          if (customerOrders.length > 0) {
+            setSelectedOrderId(customerOrders[0].id);
+            const pendingAmount = Math.max(0, customerOrders[0].totalAmount - customerOrders[0].paidAmount);
+            setAmount(pendingAmount > 0 ? String(pendingAmount) : '');
+          }
+        } else if (customerList.length > 0) {
+          setSelectedCustomerId(customerList[0].id);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -77,6 +95,31 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId);
   const pendingBalance = selectedOrder ? Math.max(0, selectedOrder.totalAmount - selectedOrder.paidAmount) : 0;
+
+  // Filter orders by selected customer and exclude fully paid orders
+  const filteredOrders = selectedCustomerId
+    ? orders.filter((o) => o.customerId === selectedCustomerId && o.paymentStatus !== 'paid')
+    : [];
+
+  const handleCustomerChange = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    setSelectedOrderId('');
+    setAmount('');
+    activeReceiptIdRef.current = null;
+    setIsTimedOut(false);
+    setError('');
+    setSuccessMessage('');
+
+    // Auto-select first outstanding order for the new customer
+    if (customerId) {
+      const customerOrders = orders.filter((o) => o.customerId === customerId && o.paymentStatus !== 'paid');
+      if (customerOrders.length > 0) {
+        setSelectedOrderId(customerOrders[0].id);
+        const pending = Math.max(0, customerOrders[0].totalAmount - customerOrders[0].paidAmount);
+        setAmount(pending > 0 ? String(pending) : '');
+      }
+    }
+  };
 
   const handleOrderChange = (orderId: string) => {
     setSelectedOrderId(orderId);
@@ -155,6 +198,10 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submissionInProgress.current || loading || verifying) return;
+    if (!selectedCustomerId) {
+      setError('Please select a customer.');
+      return;
+    }
     if (!selectedOrder) {
       setError('Please select an eligible order.');
       return;
@@ -261,20 +308,49 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
         )}
 
         <div>
+          <label className="form-label">Select Customer</label>
+          <select
+            value={selectedCustomerId}
+            onChange={(e) => handleCustomerChange(e.target.value)}
+            className="form-select"
+            required
+          >
+            <option value="">-- Select Customer --</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.company || customer.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="form-label">Select Sales Order</label>
           <select
             value={selectedOrderId}
             onChange={(e) => handleOrderChange(e.target.value)}
             className="form-select"
+            disabled={!selectedCustomerId}
+            required
           >
-            {orders.map((o) => {
-              const pending = Math.max(0, o.totalAmount - o.paidAmount);
-              return (
-                <option key={o.id} value={o.id}>
-                  {o.orderNumber} — {o.customerName} (Pending: ₹{pending.toLocaleString()})
-                </option>
-              );
-            })}
+            {!selectedCustomerId ? (
+              <option value="">-- Select Customer First --</option>
+            ) : filteredOrders.length === 0 ? (
+              <option value="">No outstanding orders</option>
+            ) : (
+              <>
+                <option value="">-- Select Order --</option>
+                {filteredOrders.map((o) => {
+                  const pending = Math.max(0, o.totalAmount - o.paidAmount);
+                  const orderDate = formatDate(o.orderDate) || 'N/A';
+                  return (
+                    <option key={o.id} value={o.id}>
+                      {o.orderNumber} - Pending: ₹{pending.toLocaleString()} - {orderDate}
+                    </option>
+                  );
+                })}
+              </>
+            )}
           </select>
         </div>
 
@@ -282,7 +358,9 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
           <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1 text-xs text-slate-700">
             <div className="flex justify-between">
               <span>Customer:</span>
-              <span className="font-semibold">{selectedOrder.customerName}</span>
+              <span className="font-semibold">
+                {customers.find((c) => c.id === selectedCustomerId)?.company || customers.find((c) => c.id === selectedCustomerId)?.name || selectedOrder.customerName}
+              </span>
             </div>
             <div className="flex justify-between">
               <span>Order Total Amount:</span>

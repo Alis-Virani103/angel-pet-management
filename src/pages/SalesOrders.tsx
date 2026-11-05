@@ -8,6 +8,8 @@ import { formatNumberDisplay } from '../utils/packetUtils';
 import { isRegularOrder, isWithin24HourVisibilityWindow, isGstExemptOrder } from '../utils/gstUtils';
 import { formatDate } from '../utils/dateUtils';
 import { Badge } from '../components/common/Badge';
+import { OrderPhotosModal } from '../components/modals/OrderPhotosModal';
+import { SubDeliveryChallanPrint } from '../components/print/SubDeliveryChallanPrint';
 import {
   Search,
   Plus,
@@ -17,7 +19,8 @@ import {
   Building2,
   Printer,
   X,
-  Info
+  Info,
+  Camera
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
@@ -25,13 +28,17 @@ import { useAuth } from '../auth/AuthContext';
 interface SalesOrdersProps {
   onOpenNewOrderModal: () => void;
   onOpenRecordPaymentModal: (orderId?: string) => void;
-  onOpenNewDispatchModal: (orderId?: string) => void;
+  onOpenNewDispatchModal: (orderId?: string, printAfterSave?: boolean) => void;
+  challanToPrint?: Dispatch | null;
+  onChallanPrinted?: () => void;
 }
 
 export const SalesOrders: React.FC<SalesOrdersProps> = ({
   onOpenNewOrderModal,
   onOpenRecordPaymentModal,
-  onOpenNewDispatchModal
+  onOpenNewDispatchModal,
+  challanToPrint,
+  onChallanPrinted
 }) => {
   const { t } = useTranslation();
   const { can } = useAuth();
@@ -56,6 +63,25 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [printDispatch, setPrintDispatch] = useState<Dispatch | null>(null);
   const [viewChallan, setViewChallan] = useState(false);
   const challanPrintRef = useRef<HTMLDivElement>(null);
+  const [viewPhotosOrder, setViewPhotosOrder] = useState<Order | null>(null);
+  const autoPrintedChallanRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!challanToPrint) return;
+    let cancelled = false;
+    const prepareChallan = async () => {
+      const [orderList, dispatchList] = await Promise.all([getOrders(), getDispatches()]);
+      const order = orderList.find((candidate) => candidate.id === challanToPrint.orderId || candidate.orderNumber === challanToPrint.orderNumber);
+      if (cancelled || !order) return;
+      setOrders(orderList);
+      setDispatches(dispatchList);
+      setPrintOrder(order);
+      setPrintDispatch(challanToPrint);
+      setViewChallan(false);
+    };
+    prepareChallan().catch((error) => console.error(error));
+    return () => { cancelled = true; };
+  }, [challanToPrint]);
 
   useEffect(() => {
     loadOrders();
@@ -89,6 +115,35 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
   };
 
   const printProgress = printOrder ? getOrderDeliveryProgress(printOrder, dispatches) : null;
+
+  useEffect(() => {
+    if (!challanToPrint || !printOrder || printDispatch?.id !== challanToPrint.id) return;
+    if (autoPrintedChallanRef.current === challanToPrint.id) return;
+    autoPrintedChallanRef.current = challanToPrint.id;
+
+    const timer = window.setTimeout(() => {
+      let cleanedUp = false;
+      const clearPrintedChallan = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        window.removeEventListener('afterprint', clearPrintedChallan);
+        window.clearTimeout(fallbackTimer);
+        setPrintOrder(null);
+        setPrintDispatch(null);
+        onChallanPrinted?.();
+      };
+      const fallbackTimer = window.setTimeout(clearPrintedChallan, 5000);
+      window.addEventListener('afterprint', clearPrintedChallan);
+      window.print();
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [challanToPrint, printOrder, printDispatch, onChallanPrinted]);
+
+  useEffect(() => {
+    if (viewChallan || printDispatch) return;
+    setPrintOrder(null);
+  }, [viewChallan, printDispatch]);
 
   // Unique customer list for dropdown (only regular orders)
   const customerNames = Array.from(new Set(orders.filter(isRegularOrder).map((o) => o.companyName || o.customerName)));
@@ -257,19 +312,21 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <th className="py-3.5 px-4">Total Amount</th>
                 <th className="py-3.5 px-4">Payment</th>
                 <th className="py-3.5 px-4">Order Status</th>
+                <th className="py-3.5 px-4">Photos</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {sortedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={10} className="py-12 text-center text-slate-400 font-medium">
                     No orders match your filter criteria.
                   </td>
                 </tr>
               ) : (
                 sortedOrders.map((order) => {
                   const totalQty = getOrderQuantity(order);
+                  const deliveryProgress = getOrderDeliveryProgress(order, dispatches);
                   const isAS = order.orderType === 'AS';
 
                   return (
@@ -316,6 +373,16 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <td className="py-3.5 px-4">
                         <Badge status={order.orderStatus} />
                       </td>
+                      <td className="py-3.5 px-4">
+                        {order.photos && order.photos.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-1 rounded-md border border-purple-200">
+                            <Camera className="w-3 h-3" />
+                            {order.photos.length}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end space-x-2">
                           <Link
@@ -344,15 +411,27 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
                               <IndianRupee className="w-4 h-4" />
                             </button>
                           )}
-                          {order.orderStatus !== 'completed' && order.orderStatus !== 'dispatched' && order.orderStatus !== 'cancelled' && can('dispatch', 'create') && (
+                          {order.orderStatus !== 'completed' && order.orderStatus !== 'cancelled' && deliveryProgress.totalRemainingQuantity > 0 && can('dispatch', 'create') && (
                             <button
-                              onClick={() => onOpenNewDispatchModal(order.id)}
+                              onClick={() => onOpenNewDispatchModal(order.id, true)}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-50 transition-colors"
                               title="Create Dispatch"
                             >
                               <Truck className="w-4 h-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => setViewPhotosOrder(order)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 transition-colors relative"
+                            title="Upload Photos"
+                          >
+                            <Camera className="w-4 h-4" />
+                            {order.photos && order.photos.length > 0 && (
+                              <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                {order.photos.length}
+                              </span>
+                            )}
+                          </button>
 
                         </div>
                       </td>
@@ -610,8 +689,18 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
         </div>
       )}
 
+      {/* ── ORDER PHOTOS MODAL ──────────────────────────────────────────── */}
+      {viewPhotosOrder && (
+        <OrderPhotosModal
+          isOpen={!!viewPhotosOrder}
+          onClose={() => setViewPhotosOrder(null)}
+          order={viewPhotosOrder}
+          onPhotosUpdated={loadOrders}
+        />
+      )}
+
       {/* ── PRINT-ONLY CHALLAN (hidden on screen) ──────────────────────── */}
-      {printOrder && printProgress && (
+      {printOrder && printProgress && !challanToPrint && (
         <div id="angel-print-sales-challan" style={{ display: 'none' }}>
           <div style={{ fontFamily: 'Arial, sans-serif', width: '210mm', minHeight: '297mm', padding: '14mm 16mm', boxSizing: 'border-box', color: '#0f172a', background: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #2563eb', paddingBottom: '12px', marginBottom: '14px' }}>
@@ -691,6 +780,12 @@ export const SalesOrders: React.FC<SalesOrdersProps> = ({
               <span>Authorized Signatory</span><span>Receiver's Signature & Stamp</span>
             </div>
           </div>
+        </div>
+      )}
+
+      {challanToPrint && printOrder && printProgress && printDispatch && printDispatch.id === challanToPrint.id && (
+        <div id="angel-print-challan" style={{ display: 'none' }}>
+          <SubDeliveryChallanPrint dispatch={printDispatch} order={printOrder} />
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { RawMaterial, RawMaterialCategory, PurchaseItem, PurchaseStatus, Supplier, PurchasedMaterial } from '../../types';
-import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers, getPurchasedMaterials } from '../../services/db';
+import { getRawMaterials, addRawMaterial, addPurchase, getSuppliers, getPurchasedMaterials, getCustomCategories, addCustomCategory } from '../../services/db';
 import {
   toBaseQuantity,
   deriveMaterialBagSpecs,
@@ -317,6 +317,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   const [newMaterialName, setNewMaterialName] = useState('');
   const [newMaterialCode, setNewMaterialCode] = useState('');
   const [newMaterialCategory, setNewMaterialCategory] = useState<RawMaterialCategory>('granules');
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
   const [newMaterialUnit, setNewMaterialUnit] = useState('kg');
   const [newMaterialBaseUnit, setNewMaterialBaseUnit] = useState('kg');
   const [newMaterialPurchaseUnit, setNewMaterialPurchaseUnit] = useState('kg');
@@ -327,12 +331,43 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadMaterials();
+      loadCustomCategories();
     } else {
       setItems([createDraftItem()]);
       setSelectedSupplierId('');
       setError('');
+      setIsAddingNewCategory(false);
+      setNewCategoryName('');
+      setCategoryError('');
     }
   }, [isOpen]);
+
+  const loadCustomCategories = async () => {
+    try {
+      const categories = await getCustomCategories();
+      setCustomCategories(categories);
+    } catch (err) {
+      console.error('Failed to load custom categories:', err);
+    }
+  };
+
+  const handleAddNewCategory = async () => {
+    setCategoryError('');
+    if (!newCategoryName.trim()) {
+      setCategoryError('Please enter a category name');
+      return;
+    }
+
+    try {
+      const addedCategory = await addCustomCategory(newCategoryName);
+      setNewMaterialCategory(addedCategory as RawMaterialCategory);
+      setCustomCategories([...customCategories, addedCategory]);
+      setIsAddingNewCategory(false);
+      setNewCategoryName('');
+    } catch (err) {
+      setCategoryError(err instanceof Error ? err.message : 'Failed to add category');
+    }
+  };
 
   const loadMaterials = async () => {
     setSuppliersLoading(true);
@@ -514,6 +549,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     const netAvailablePieces = conversion && !('error' in conversion)
       ? Math.max(0, conversion.calculatedPieces - totalWastage)
       : undefined;
+    // Calculate piece rate: total cost / net available pieces
+    const pieceRate = netAvailablePieces !== undefined && netAvailablePieces > 0 && quantity > 0
+      ? (quantity * unitCost) / netAvailablePieces
+      : undefined;
     return {
       rawMaterialId: useInlineName && isFirstItemWithInline ? '' : item.rawMaterialId,
       rawMaterialName: isFirstItemWithInline ? (newMaterialName.trim() || 'New Raw Material') : (material?.name || ''),
@@ -527,7 +566,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       ...conversionFields,
       wastage1Pieces: wastage1Pieces > 0 ? wastage1Pieces : undefined,
       wastage2Pieces: wastage2Pieces > 0 ? wastage2Pieces : undefined,
-      netAvailablePieces
+      netAvailablePieces,
+      pieceRate
     };
   };
 
@@ -654,6 +694,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
           category: createdMaterial.category,
           unit: createdMaterial.purchaseUnit
         };
+        // Reload materials to include the newly created material in the dropdown
+        await loadMaterials();
       }
 
       const purchaseSubtotal = completedPurchaseItems.reduce((sum, item) => sum + item.subtotal, 0);
@@ -1031,16 +1073,69 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Category</label>
-                <select
-                  value={newMaterialCategory}
-                  onChange={(e) => setNewMaterialCategory(e.target.value as RawMaterialCategory)}
-                  className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="granules">Granules</option>
-                  <option value="masterbatch">Masterbatch</option>
-                  <option value="colour">Colour</option>
-                  <option value="packaging">Packaging</option>
-                </select>
+                {isAddingNewCategory ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Enter new category name"
+                      className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddNewCategory}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewCategory(false);
+                        setNewCategoryName('');
+                        setCategoryError('');
+                      }}
+                      className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={newMaterialCategory}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '__add_new__') {
+                        setIsAddingNewCategory(true);
+                      } else {
+                        setNewMaterialCategory(value as RawMaterialCategory);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-white rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="granules">Granules</option>
+                    <option value="masterbatch">Masterbatch</option>
+                    <option value="colour">Colour</option>
+                    <option value="packaging">Packaging</option>
+                    {customCategories.length > 0 && (
+                      <optgroup label="Custom Categories">
+                        {customCategories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value="__add_new__" className="font-semibold text-blue-600">
+                      + Add New Category
+                    </option>
+                  </select>
+                )}
+                {categoryError && (
+                  <p className="text-[10px] text-rose-600 mt-1">{categoryError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Base Unit</label>

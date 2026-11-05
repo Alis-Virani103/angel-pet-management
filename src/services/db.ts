@@ -113,6 +113,7 @@ const initialFinishedGoodsLogs: FinishedGoodsLog[] = [];
 const initialDocuments: DocumentItem[] = [];
 const initialPurchases: PurchaseOrder[] = [];
 const initialFinanceTransactions: FinanceTransaction[] = [];
+const initialCustomCategories: string[] = [];
 const initialSettings: Settings = {
   companyName: '',
   gstin: '',
@@ -142,7 +143,8 @@ const STORAGE_KEYS = {
   PURCHASES: 'angel_pet_purchases',
   PURCHASED_MATERIALS: 'angel_pet_purchased_materials',
   PAYMENT_REMINDERS: 'angel_pet_payment_reminders',
-  FINANCE_TRANSACTIONS: 'angel_pet_finance_transactions'
+  FINANCE_TRANSACTIONS: 'angel_pet_finance_transactions',
+  CUSTOM_CATEGORIES: 'angel_pet_custom_categories'
 };
 
 const DEMO_DATA_STORAGE_KEYS = [
@@ -673,13 +675,24 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
       : getLocalItem<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
     const existingPaymentIds = new Set(existingPayments.map((payment) => payment.id));
     const receiptNumber = createUniqueId('REC', existingPaymentIds);
+
+    // Get customer name from customers collection if customerId is available
+    let customerName = newOrder.customerName || newOrder.companyName;
+    if (newOrder.customerId) {
+      const customers = await getCustomers();
+      const customer = customers.find((c) => c.id === newOrder.customerId);
+      if (customer) {
+        customerName = customer.name;
+      }
+    }
+
     const newPayment: Payment = {
       id: receiptNumber,
       receiptNumber,
       orderId: newOrder.id,
       orderNumber: newOrder.orderNumber,
       customerId: newOrder.customerId,
-      customerName: newOrder.companyName || newOrder.customerName,
+      customerName,
       amount: newOrder.totalAmount,
       paymentMethod: 'cash',
       paymentDate: orderDate,
@@ -701,7 +714,7 @@ export async function addOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'pa
       await addFinanceTransaction({
         transactionType: 'customer_payment',
         amount: newPayment.amount, // Positive for money received
-        party: newPayment.customerName || newOrder.customerName || newOrder.companyName || 'Customer',
+        party: customerName || 'Customer',
         partyType: 'customer',
         referenceId: newPayment.id,
         referenceNumber: newPayment.receiptNumber,
@@ -1160,12 +1173,22 @@ export async function addPayment(
     // Automatically create FinanceTransaction for customer payment
     const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
     const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
-    
+
     if (!existingTransactionIds.has(newPayment.id)) {
+      // Get customer name from customers collection if customerId is available
+      let partyName = newPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer';
+      if (targetOrder.customerId) {
+        const customers = getLocalItem<Customer[]>(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+        const customer = customers.find((c) => c.id === targetOrder.customerId);
+        if (customer) {
+          partyName = customer.name;
+        }
+      }
+
       await addFinanceTransaction({
         transactionType: 'customer_payment',
         amount: newPayment.amount, // Positive for money received
-        party: newPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer',
+        party: partyName,
         partyType: 'customer',
         referenceId: newPayment.id,
         referenceNumber: newPayment.receiptNumber,
@@ -1270,14 +1293,24 @@ export async function addPayment(
   // Check if a transaction for this payment already exists to prevent duplicates
   const existingTransactions = getLocalItem<FinanceTransaction[]>(STORAGE_KEYS.FINANCE_TRANSACTIONS, initialFinanceTransactions);
   const existingTransactionIds = new Set(existingTransactions.map((t) => t.referenceId));
-  
+
   if (!existingTransactionIds.has(finalPayment.id)) {
     const targetOrder = orderList.find((o) => o.id === targetOrderId);
     if (targetOrder) {
+      // Get customer name from customers collection if customerId is available
+      let partyName = finalPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer';
+      if (targetOrder.customerId) {
+        const customers = getLocalItem<Customer[]>(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+        const customer = customers.find((c) => c.id === targetOrder.customerId);
+        if (customer) {
+          partyName = customer.name;
+        }
+      }
+
       await addFinanceTransaction({
         transactionType: 'customer_payment',
         amount: finalPayment.amount, // Positive for money received
-        party: finalPayment.customerName || targetOrder.customerName || targetOrder.companyName || 'Customer',
+        party: partyName,
         partyType: 'customer',
         referenceId: finalPayment.id,
         referenceNumber: finalPayment.receiptNumber,
@@ -1451,6 +1484,44 @@ export async function getRawMaterials(): Promise<RawMaterial[]> {
   return items;
 }
 
+// ================= CUSTOM CATEGORIES =================
+export async function getCustomCategories(): Promise<string[]> {
+  const categories = getLocalItem<string[]>(STORAGE_KEYS.CUSTOM_CATEGORIES, initialCustomCategories);
+  return categories;
+}
+
+export async function addCustomCategory(category: string): Promise<string> {
+  const trimmedCategory = category.trim();
+  if (!trimmedCategory) {
+    throw new Error('Category name cannot be empty');
+  }
+
+  const categories = await getCustomCategories();
+  const normalizedCategory = trimmedCategory.toLowerCase().replace(/\s+/g, ' ');
+
+  // Check for duplicates (case-insensitive, ignoring extra spaces)
+  const isDuplicate = categories.some(cat =>
+    cat.toLowerCase().replace(/\s+/g, ' ') === normalizedCategory
+  );
+
+  if (isDuplicate) {
+    throw new Error('Category already exists');
+  }
+
+  const updatedCategories = [...categories, trimmedCategory];
+  setLocalItem(STORAGE_KEYS.CUSTOM_CATEGORIES, updatedCategories);
+
+  if (shouldSyncToFirebase()) {
+    const settingsDoc = doc(getDb(), 'settings', 'customCategories');
+    await persistCloudWrite(
+      setDoc(settingsDoc, { categories: updatedCategories }, { merge: true }),
+      'Saving custom categories'
+    );
+  }
+
+  return trimmedCategory;
+}
+
 export async function addRawMaterial(data: Omit<RawMaterial, 'id' | 'status' | 'lastRestocked'>): Promise<RawMaterial> {
   await requireAnyPermission([
     ['rawMaterials', 'create'],
@@ -1555,6 +1626,8 @@ export async function recordRawMaterialUsage(data: Omit<RawMaterialUsage, 'id'>)
   const baseQuantity = toBaseQuantity(data.quantity, data.unit, material);
   const baseTotalDeduction = toBaseQuantity(totalDeductionInput, data.unit, material);
   const baseUnit = material.baseUnit || material.unit;
+  // Wastage is recorded in pieces, but equivalentPieces represents net production
+  // If wastage is provided, it's already accounted for in totalDeduction vs quantity
   const equivalentPieces = data.equivalentPieces ?? (
     material.piecesPerBaseUnit && material.piecesPerBaseUnit > 0
       ? baseQuantity * material.piecesPerBaseUnit
@@ -1895,9 +1968,11 @@ async function processPurchaseStockAddition(purchase: PurchaseOrder): Promise<Pu
       const previousAddition = additionsByMaterial.get(material.id) || 0;
       const totalAddition = previousAddition + quantityToAdd;
       const newStock = material.currentStock + totalAddition;
+      // Use pieceRate if available for piece-based materials, otherwise use unitCost
+      const effectiveUnitCost = item.pieceRate && item.pieceRate > 0 ? item.pieceRate : (item.unitCost > 0 ? item.unitCost : material.unitCost);
       await updateRawMaterial(material.id, {
         currentStock: newStock,
-        unitCost: item.unitCost > 0 ? item.unitCost : material.unitCost,
+        unitCost: effectiveUnitCost,
         supplier: purchase.supplierName || material.supplier,
         lastRestocked: purchase.purchaseDate || new Date().toISOString().split('T')[0]
       });
@@ -1980,11 +2055,15 @@ export async function addFinishedGoodsLog(data: Omit<FinishedGoodsLog, 'id'>): P
   }
 
   // Add produced quantity to target product stock
+  // quantityProduced is the net amount after wastage, so add it directly
+  // wastagePieces is recorded separately for production history/reporting
+  const netQuantity = data.quantityProduced;
+
   const products = await getProducts();
   const product = products.find((p) => p.id === data.productId);
   if (product) {
     await updateProduct(product.id, {
-      currentStock: product.currentStock + data.quantityProduced
+      currentStock: product.currentStock + netQuantity
     });
   }
 

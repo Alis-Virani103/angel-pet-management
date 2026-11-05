@@ -36,7 +36,7 @@ import { AddRawMaterialModal } from './components/modals/AddRawMaterialModal';
 import { UploadDocumentModal } from './components/modals/UploadDocumentModal';
 import { NewPurchaseModal } from './components/modals/NewPurchaseModal';
 import { RecordPurchasePaymentModal } from './components/modals/RecordPurchasePaymentModal';
-import { ProductType, Customer, Product, RawMaterial, Supplier } from './types';
+import { ProductType, Customer, Product, RawMaterial, Supplier, Dispatch } from './types';
 import { useTranslation } from './i18n';
 
 export function App() {
@@ -58,6 +58,8 @@ export function App() {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isNewDispatchOpen, setIsNewDispatchOpen] = useState(false);
   const [targetOrderIdForDispatch, setTargetOrderIdForDispatch] = useState<string | undefined>(undefined);
+  const [challanToPrint, setChallanToPrint] = useState<Dispatch | null>(null);
+  const [printAfterSaveDispatch, setPrintAfterSaveDispatch] = useState(false);
   const [isAddFinishedGoodsOpen, setIsAddFinishedGoodsOpen] = useState(false);
 
   const [isAddRawMaterialOpen, setIsAddRawMaterialOpen] = useState(false);
@@ -83,8 +85,9 @@ export function App() {
     setIsRecordPurchasePaymentOpen(true);
   };
 
-  const openNewDispatch = (orderId?: string) => {
+  const openNewDispatch = (orderId?: string, printAfterSave = false) => {
     setTargetOrderIdForDispatch(orderId);
+    setPrintAfterSaveDispatch(printAfterSave);
     setIsNewDispatchOpen(true);
   };
 
@@ -148,7 +151,9 @@ export function App() {
                 key={`sales-${refreshKey}`}
                 onOpenNewOrderModal={() => setIsNewOrderOpen(true)}
                 onOpenRecordPaymentModal={(id) => openRecordPayment(id)}
-                onOpenNewDispatchModal={(id) => openNewDispatch(id)}
+                onOpenNewDispatchModal={(id, printAfterSave) => openNewDispatch(id, printAfterSave)}
+                challanToPrint={challanToPrint}
+                onChallanPrinted={() => setChallanToPrint(null)}
               />
               </PermissionRoute>
             }
@@ -343,9 +348,15 @@ export function App() {
         onClose={() => {
           setIsNewDispatchOpen(false);
           setTargetOrderIdForDispatch(undefined);
+          setPrintAfterSaveDispatch(false);
         }}
         defaultOrderId={targetOrderIdForDispatch}
-        onDispatchCreated={triggerRefresh}
+        onDispatchCreated={(dispatch) => {
+          triggerRefresh();
+          if (printAfterSaveDispatch) {
+            setChallanToPrint(dispatch);
+          }
+        }}
       />
       <AddFinishedGoodsModal
         isOpen={isAddFinishedGoodsOpen}

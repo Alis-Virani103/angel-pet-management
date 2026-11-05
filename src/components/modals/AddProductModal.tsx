@@ -35,11 +35,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [unit, setUnit] = useState('pcs');
   const [unitsPerPacket, setUnitsPerPacket] = useState('');
   const [allowFractionalPackets, setAllowFractionalPackets] = useState(true);
-  const [compatibleCapId, setCompatibleCapId] = useState('');
-  const [compatibleInnerId, setCompatibleInnerId] = useState('');
-  const [comboPriceA, setComboPriceA] = useState('');
-  const [comboPriceB, setComboPriceB] = useState('');
-  const [comboPriceC, setComboPriceC] = useState('');
   const [weightPerPiece, setWeightPerPiece] = useState('');
   const [weightUnit, setWeightUnit] = useState<'g' | 'kg'>('g');
   const [status, setStatus] = useState<ProductStatus>('active');
@@ -67,17 +62,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         const savedUnitsPerPacket = getProductUnitsPerPacket(initialProduct);
         setUnitsPerPacket(savedUnitsPerPacket ? String(savedUnitsPerPacket) : '');
         setAllowFractionalPackets(initialProduct.allowFractionalPackets !== false);
-        setCompatibleCapId(initialProduct.compatibleCapId || '');
-        setCompatibleInnerId(initialProduct.compatibleInnerId || '');
-        const rawComboA = initialProduct.comboPriceA as unknown;
-        const numComboA = rawComboA !== undefined && rawComboA !== null && rawComboA !== '' ? Number(rawComboA) : NaN;
-        setComboPriceA(!isNaN(numComboA) && numComboA > 0 ? (typeof rawComboA === 'number' ? rawComboA.toFixed(2) : cleanDecimalInput(String(rawComboA))) : '');
-        const rawComboB = initialProduct.comboPriceB as unknown;
-        const numComboB = rawComboB !== undefined && rawComboB !== null && rawComboB !== '' ? Number(rawComboB) : NaN;
-        setComboPriceB(!isNaN(numComboB) && numComboB > 0 ? (typeof rawComboB === 'number' ? rawComboB.toFixed(2) : cleanDecimalInput(String(rawComboB))) : '');
-        const rawComboC = initialProduct.comboPriceC as unknown;
-        const numComboC = rawComboC !== undefined && rawComboC !== null && rawComboC !== '' ? Number(rawComboC) : NaN;
-        setComboPriceC(!isNaN(numComboC) && numComboC > 0 ? (typeof rawComboC === 'number' ? rawComboC.toFixed(2) : cleanDecimalInput(String(rawComboC))) : '');
         const rawWeight = initialProduct.weightPerPiece ??
           (initialProduct as any).weight ??
           (initialProduct as any).pieceWeight ??
@@ -103,11 +87,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setUnit('pcs');
         setUnitsPerPacket('');
         setAllowFractionalPackets(true);
-        setCompatibleCapId('');
-        setCompatibleInnerId('');
-        setComboPriceA('');
-        setComboPriceB('');
-        setComboPriceC('');
         setWeightPerPiece('');
         setWeightUnit('g');
         setStatus('active');
@@ -176,10 +155,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
       setUploadStatusText('Saving product data...');
 
-      const parsedComboPriceA = comboPriceA !== '' && !isNaN(Number(comboPriceA)) && Number(comboPriceA) > 0 ? Number(comboPriceA) : undefined;
-      const parsedComboPriceB = comboPriceB !== '' && !isNaN(Number(comboPriceB)) && Number(comboPriceB) > 0 ? Number(comboPriceB) : undefined;
-      const parsedComboPriceC = comboPriceC !== '' && !isNaN(Number(comboPriceC)) && Number(comboPriceC) > 0 ? Number(comboPriceC) : undefined;
-
       let parsedWeightPerPiece: number | undefined = undefined;
       let parsedWeightUnit: 'g' | 'kg' | undefined = undefined;
       if (weightPerPiece !== '' && weightPerPiece !== null && weightPerPiece !== undefined) {
@@ -209,15 +184,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           ...(parsedUnitsPerPacket !== undefined
             ? { unitsPerPacket: parsedUnitsPerPacket, allowFractionalPackets }
             : {}),
-          ...(type === 'bottle'
-            ? {
-                compatibleCapId: compatibleCapId || undefined,
-                compatibleInnerId: compatibleInnerId || undefined,
-                comboPriceA: parsedComboPriceA,
-                comboPriceB: parsedComboPriceB,
-                comboPriceC: parsedComboPriceC
-              }
-            : {}),
           weightPerPiece: parsedWeightPerPiece,
           weightUnit: parsedWeightUnit,
           status
@@ -242,15 +208,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           minimumStock: parsedMinimumStock,
           unit,
           ...(parsedUnitsPerPacket ? { unitsPerPacket: parsedUnitsPerPacket, allowFractionalPackets } : {}),
-          ...(type === 'bottle'
-            ? {
-                compatibleCapId: compatibleCapId || undefined,
-                compatibleInnerId: compatibleInnerId || undefined,
-                comboPriceA: parsedComboPriceA,
-                comboPriceB: parsedComboPriceB,
-                comboPriceC: parsedComboPriceC
-              }
-            : {}),
           weightPerPiece: parsedWeightPerPiece,
           weightUnit: parsedWeightUnit,
           status,
@@ -409,103 +366,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* COMBO CONFIGURATION (Only for Bottle Products) */}
-        {type === 'bottle' && (
-          <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Combo Configuration
-              </label>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Set compatible components and bundled Bottle + Inner + Cap combo pricing.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="form-label">Compatible Inner</label>
-                <select
-                  value={compatibleInnerId}
-                  onChange={(e) => setCompatibleInnerId(e.target.value)}
-                  className="form-select bg-white"
-                >
-                  <option value="">Select Inner Product</option>
-                  {allProducts
-                    .filter((p) => p.type === 'inner')
-                    .map((inner) => (
-                      <option key={inner.id} value={inner.id}>
-                        {inner.name} ({inner.sizeOrType || inner.sku})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="form-label">Compatible Cap</label>
-                <select
-                  value={compatibleCapId}
-                  onChange={(e) => setCompatibleCapId(e.target.value)}
-                  className="form-select bg-white"
-                >
-                  <option value="">Select Cap Product</option>
-                  {allProducts
-                    .filter((p) => p.type === 'cap')
-                    .map((cap) => (
-                      <option key={cap.id} value={cap.id}>
-                        {cap.name} ({cap.sizeOrType || cap.sku})
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="form-label">COMBO PRICE — A</label>
-                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
-                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Combo Price A"
-                    value={comboPriceA}
-                    onChange={(e) => setComboPriceA(cleanDecimalInput(e.target.value))}
-                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">COMBO PRICE — B</label>
-                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
-                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Combo Price B"
-                    value={comboPriceB}
-                    onChange={(e) => setComboPriceB(cleanDecimalInput(e.target.value))}
-                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">COMBO PRICE — C</label>
-                <div className="flex w-full min-w-0 items-center rounded-xl border border-slate-200 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
-                  <span className="shrink-0 pl-3 text-xs font-semibold text-slate-400">₹</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Combo Price C"
-                    value={comboPriceC}
-                    onChange={(e) => setComboPriceC(cleanDecimalInput(e.target.value))}
-                    className="h-10 w-0 min-w-0 flex-1 border-0 bg-transparent px-2 text-left text-xs font-medium tabular-nums text-slate-800 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Stock & Unit */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

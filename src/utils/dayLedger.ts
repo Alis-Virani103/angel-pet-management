@@ -1,4 +1,4 @@
-import { Expense, Order, Payment, PurchaseOrder } from '../types';
+import { Customer, Expense, Order, Payment, PurchaseOrder } from '../types';
 
 export type DayLedgerType = 'Sale' | 'Customer Payment' | 'Purchase' | 'Supplier Payment' | 'Expense';
 
@@ -22,6 +22,7 @@ export interface DayLedgerSources {
   payments: Payment[];
   purchases: PurchaseOrder[];
   expenses: Expense[];
+  customers?: Customer[];
 }
 
 export interface DayLedgerDateBounds {
@@ -101,7 +102,8 @@ export function buildDayLedgerEntries(sources: DayLedgerSources): DayLedgerEntry
   sources.orders
     .filter((order) => !excludedCommercialOrder(order))
     .forEach((order) => {
-      const party = order.customerName || order.companyName || 'Customer';
+      const customer = sources.customers?.find((c) => c.id === order.customerId);
+      const party = customer?.name || order.customerName || order.companyName || 'Customer';
       const desc = order.items && order.items.length > 0
         ? `Sale - ${order.items.map((i) => i.productName).filter(Boolean).slice(0, 2).join(', ')}${order.items.length > 2 ? '...' : ''}`
         : 'Sales';
@@ -124,11 +126,13 @@ export function buildDayLedgerEntries(sources: DayLedgerSources): DayLedgerEntry
     ) {
       return;
     }
+    const customer = sources.customers?.find((c) => c.id === payment.customerId);
+    const party = customer?.name || payment.customerName || 'Customer';
     pushUnique({
       id: `cust-pay-${payment.id}`,
       date: payment.paymentDate || '',
       description: 'Payment Received',
-      party: payment.customerName || 'Customer',
+      party,
       transactionType: 'Customer Payment',
       debit: 0,
       credit: payment.amount || 0,

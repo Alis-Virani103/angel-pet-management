@@ -531,11 +531,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     let defaultInnerId = '';
     let defaultCapId = '';
     if (product && product.type === 'bottle') {
-      defaultInnerId = products.some((candidate) => candidate.id === product.compatibleInnerId && candidate.type === 'inner')
-        ? product.compatibleInnerId || ''
+      defaultInnerId = product.compatibleInnerId && products.some((candidate) => candidate.id === product.compatibleInnerId && candidate.type === 'inner')
+        ? product.compatibleInnerId
         : '';
-      defaultCapId = products.some((candidate) => candidate.id === product.compatibleCapId && candidate.type === 'cap')
-        ? product.compatibleCapId || ''
+      defaultCapId = product.compatibleCapId && products.some((candidate) => candidate.id === product.compatibleCapId && candidate.type === 'cap')
+        ? product.compatibleCapId
         : '';
     }
 

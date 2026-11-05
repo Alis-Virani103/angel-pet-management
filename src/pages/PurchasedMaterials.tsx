@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, X, Calendar } from 'lucide-react';
 import { PurchasedMaterial } from '../types';
 import {
   addPurchasedMaterial,
@@ -39,6 +39,9 @@ export const PurchasedMaterials: React.FC = () => {
   const [savedMaterialNames, setSavedMaterialNames] = useState<string[]>([]);
   const [savedSuppliers, setSavedSuppliers] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'last7days' | 'thisMonth' | 'previousMonth' | 'custom'>('all');
+  const [customFromDate, setCustomFromDate] = useState('');
+  const [customToDate, setCustomToDate] = useState('');
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [editingMaterial, setEditingMaterial] = useState<PurchasedMaterial | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -74,13 +77,53 @@ export const PurchasedMaterials: React.FC = () => {
     loadMaterials();
   }, [can]);
 
+  const isDateInRange = (dateString: string): boolean => {
+    const date = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
+
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    switch (dateFilter) {
+      case 'all':
+        return true;
+      case 'today':
+        return date.toDateString() === today.toDateString();
+      case 'yesterday':
+        return date.toDateString() === yesterday.toDateString();
+      case 'last7days':
+        return date >= last7Days && date <= today;
+      case 'thisMonth':
+        return date >= thisMonth && date <= today;
+      case 'previousMonth':
+        return date >= previousMonth && date <= previousMonthEnd;
+      case 'custom':
+        if (!customFromDate || !customToDate) return true;
+        const fromDate = new Date(customFromDate);
+        const toDate = new Date(customToDate);
+        toDate.setHours(23, 59, 59, 999);
+        return date >= fromDate && date <= toDate;
+      default:
+        return true;
+    }
+  };
+
   const filteredMaterials = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return materials;
-    return materials.filter((material) =>
-      [material.materialName, material.supplier].some((value) => value.toLowerCase().includes(query))
-    );
-  }, [materials, searchQuery]);
+    return materials.filter((material) => {
+      const matchesSearch = !query || [material.materialName, material.supplier].some((value) => value.toLowerCase().includes(query));
+      const matchesDate = isDateInRange(material.createdAt);
+      return matchesSearch && matchesDate;
+    });
+  }, [materials, searchQuery, dateFilter, customFromDate, customToDate]);
 
   const totals = calculatePurchasedMaterialTotals(
     form.conversionMode,
@@ -202,24 +245,76 @@ export const PurchasedMaterials: React.FC = () => {
             <h2 className="text-base font-bold text-slate-900">Material Stock</h2>
             <p className="text-xs text-slate-500">Calculated values update when a record is saved.</p>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input className="form-input pl-9" placeholder="Search material or supplier..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className="form-input pl-9" placeholder="Search material or supplier..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+            </div>
+            <div className="relative w-full sm:w-48">
+              <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select
+                className="form-select pl-9"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
+              >
+                <option value="all">All Dates</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last7days">Last 7 Days</option>
+                <option value="thisMonth">This Month</option>
+                <option value="previousMonth">Previous Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
           </div>
         </div>
+        {dateFilter === 'custom' && (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 p-4 bg-slate-50 rounded-xl">
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">From Date</label>
+              <input
+                type="date"
+                className="form-input"
+                value={customFromDate}
+                onChange={(e) => setCustomFromDate(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">To Date</label>
+              <input
+                type="date"
+                className="form-input"
+                value={customToDate}
+                onChange={(e) => setCustomToDate(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDateFilter('all');
+                setCustomFromDate('');
+                setCustomToDate('');
+              }}
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+        )}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left">
+          <table className="w-full min-w-[1000px] border-collapse text-left">
             <thead><tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              <th className="px-4 py-3.5">Material</th><th className="px-4 py-3.5">Supplier</th><th className="px-4 py-3.5">Quantity</th>
+              <th className="px-4 py-3.5">Material</th><th className="px-4 py-3.5">Supplier</th><th className="px-4 py-3.5">Purchase Date</th><th className="px-4 py-3.5">Quantity</th>
               <th className="px-4 py-3.5">Weight per Unit</th><th className="px-4 py-3.5">Total Weight</th>
               <th className="px-4 py-3.5">Pieces</th><th className="px-4 py-3.5 text-right">Actions</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-              {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading purchased materials...</td></tr> :
-                filteredMaterials.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No purchased materials found.</td></tr> :
+              {loading ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading purchased materials...</td></tr> :
+                filteredMaterials.length === 0 ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No purchased materials found.</td></tr> :
                 filteredMaterials.map((material) => <tr key={material.id} className="transition-colors hover:bg-slate-50/80">
                   <td className="px-4 py-3.5 font-bold text-slate-900">{material.materialName}</td>
                   <td className="px-4 py-3.5">{material.supplier}</td>
+                  <td className="px-4 py-3.5 text-slate-600">{new Date(material.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                   <td className="px-4 py-3.5">{material.conversionMode === 'piece_count'
                     ? `${formatNumberDisplay(material.totalPieces)} pieces`
                     : material.conversionMode === 'packets'

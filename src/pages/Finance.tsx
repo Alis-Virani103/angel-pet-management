@@ -4,6 +4,8 @@ import { Order, Payment, Expense, PurchaseOrder, Customer, Settings, PaymentRemi
 import { getOrders, getPayments, getExpenses, getPurchases, getCustomers, getSettings, deleteExpense, getPaymentReminders, savePaymentReminder, updateCustomer, getDispatches, getFinanceTransactions } from '../services/db';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { CreateConsolidatedInvoiceModal } from '../components/modals/CreateConsolidatedInvoiceModal';
+import { RecordPaymentModal } from '../components/modals/RecordPaymentModal';
 import {
   IndianRupee,
   Plus,
@@ -133,6 +135,7 @@ export const Finance: React.FC<FinanceProps> = ({
   const [purchasePaymentSearch, setPurchasePaymentSearch] = useState('');
   const [dispatchSearch, setDispatchSearch] = useState('');
   const [expenseSearch, setExpenseSearch] = useState('');
+  const [showConsolidatedInvoiceModal, setShowConsolidatedInvoiceModal] = useState(false);
   
   // Day-to-Day Ledger filter states
   const [dayLedgerDateFilter, setDayLedgerDateFilter] = useState<DateFilter>('all');
@@ -175,6 +178,10 @@ export const Finance: React.FC<FinanceProps> = ({
   const [editingCustomerReminder, setEditingCustomerReminder] = useState<Customer | null>(null);
   const [customerReminderDate, setCustomerReminderDate] = useState('');
   const [customerReminderFrequency, setCustomerReminderFrequency] = useState<PaymentReminderFrequency>('one_time');
+
+  // Record Payment Modal state
+  const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false);
+  const [recordPaymentDefaultOrderId, setRecordPaymentDefaultOrderId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadFinanceData();
@@ -225,6 +232,16 @@ export const Finance: React.FC<FinanceProps> = ({
     }
   };
 
+  const handleOpenRecordPaymentModal = (defaultOrderId?: string) => {
+    setRecordPaymentDefaultOrderId(defaultOrderId);
+    setShowRecordPaymentModal(true);
+  };
+
+  const handlePaymentRecorded = async () => {
+    setShowRecordPaymentModal(false);
+    await loadFinanceData();
+  };
+
   const activeOrders = orders.filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS');
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const todayKey = toDateKey(new Date());
@@ -253,7 +270,7 @@ export const Finance: React.FC<FinanceProps> = ({
         id: `draft-${order.id}`,
         orderId: order.id,
         customerId: order.customerId,
-        customerName: order.customerName || order.companyName,
+        customerName: customer?.name || order.customerName || order.companyName,
         phone: customer?.phone || 'Not available',
         dueDate: order.dueDate,
         followUpDate: '',
@@ -417,7 +434,7 @@ export const Finance: React.FC<FinanceProps> = ({
     summary: dayLedgerSummary,
     openingBalance: dayLedgerOpeningBalance
   } = buildDayLedger(
-    { orders, payments, purchases, expenses },
+    { orders, payments, purchases, expenses, customers },
     dayLedgerDateBounds
   );
 
@@ -427,7 +444,6 @@ export const Finance: React.FC<FinanceProps> = ({
     const query = dayLedgerSearch.trim().toLowerCase();
     if (!query) return true;
     return (
-      row.description.toLowerCase().includes(query) ||
       row.party.toLowerCase().includes(query) ||
       row.transactionType.toLowerCase().includes(query) ||
       row.date.toLowerCase().includes(query)
@@ -472,11 +488,12 @@ export const Finance: React.FC<FinanceProps> = ({
       .filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS')
       .map((order) => {
         const paid = getCollectedAmount(order);
+        const customer = customers.find((c) => c.id === order.customerId);
         return {
           type: 'SALE' as const,
           id: order.orderNumber,
           date: order.orderDate,
-          party: order.customerName || order.companyName,
+          party: customer?.name || order.customerName || order.companyName,
           total: order.totalAmount,
           paid,
           outstanding: Math.max(0, order.totalAmount - paid),
@@ -613,9 +630,10 @@ export const Finance: React.FC<FinanceProps> = ({
   if (partyType === 'customer' && isAllParties) {
     const customerOrders = orders.filter((order) => order.orderStatus !== 'cancelled' && order.orderType !== 'AS');
     customerOrders.forEach((order) => {
+      const customer = customers.find((c) => c.id === order.customerId);
       partyLedgerBase.push({
         date: order.orderDate,
-        party: order.customerName || order.companyName,
+        party: customer?.name || order.customerName || order.companyName,
         transaction: 'Sale',
         reference: order.orderNumber,
         debit: order.totalAmount,
@@ -626,7 +644,7 @@ export const Finance: React.FC<FinanceProps> = ({
     payments
       .filter((payment) => customerOrders.some((order) => order.id === payment.orderId || order.orderNumber === payment.orderId) || customers.some((customer) => customer.id === payment.customerId || customer.company === payment.customerName || customer.name === payment.customerName))
       .forEach((payment) => {
-        const customer = customers.find((candidate) => candidate.id === payment.customerId || candidate.company === payment.customerName);
+        const customer = customers.find((candidate) => candidate.id === payment.customerId || candidate.company === payment.customerName || candidate.name === payment.customerName);
         const order = customerOrders.find((candidate) => candidate.id === payment.orderId || candidate.orderNumber === payment.orderId);
         partyLedgerBase.push({
           date: payment.paymentDate,
@@ -794,6 +812,13 @@ export const Finance: React.FC<FinanceProps> = ({
           >
             <IndianRupee className="w-3.5 h-3.5" />
             <span>Record Customer Payment</span>
+          </button>}
+          {activeTab === 'sales' && can('salesOrders', 'create') && <button
+            onClick={() => setShowConsolidatedInvoiceModal(true)}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg transition-colors flex items-center space-x-1.5 shadow-2xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Consolidated Invoice</span>
           </button>}
           {activeTab === 'purchase' && can('finance', 'create') && can('purchases', 'edit') && <button
             onClick={() => onOpenRecordPurchasePaymentModal()}
@@ -990,6 +1015,13 @@ export const Finance: React.FC<FinanceProps> = ({
 
               <div className="flex items-center gap-2 self-end lg:self-auto">
                 <button
+                  onClick={() => handleOpenRecordPaymentModal()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors shadow-2xs"
+                >
+                  <IndianRupee className="w-3.5 h-3.5" />
+                  <span>Record Payment</span>
+                </button>
+                <button
                   onClick={() => window.print()}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors shadow-2xs"
                 >
@@ -1040,7 +1072,6 @@ export const Finance: React.FC<FinanceProps> = ({
                 <thead>
                   <tr className="bg-slate-50/80 border-y border-slate-200/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Description</th>
                     <th className="py-3 px-4">Party</th>
                     <th className="py-3 px-4">Transaction Type</th>
                     <th className="py-3 px-4 text-right">Debit</th>
@@ -1051,7 +1082,7 @@ export const Finance: React.FC<FinanceProps> = ({
                 <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                   {filteredDayLedgerRows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
                         {t('No ledger transactions found for the selected period.')}
                       </td>
                     </tr>
@@ -1061,7 +1092,6 @@ export const Finance: React.FC<FinanceProps> = ({
                       <tr className="bg-slate-50/80">
                         <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{dayLedgerDateBounds.start}</td>
                         <td className="py-3 px-4 font-semibold text-slate-900">Opening Net Balance</td>
-                        <td className="py-3 px-4 font-medium text-slate-800">—</td>
                         <td className="py-3 px-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/60">Opening</span>
                         </td>
@@ -1075,15 +1105,6 @@ export const Finance: React.FC<FinanceProps> = ({
                     {filteredDayLedgerRows.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{row.date ? formatDate(row.date) : '—'}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-900">
-                          {row.detailsPath ? (
-                            <Link to={row.detailsPath} className="hover:text-blue-600 transition-colors">
-                              {row.description}
-                            </Link>
-                          ) : (
-                            row.description
-                          )}
-                        </td>
                         <td className="py-3 px-4 font-medium text-slate-800">{row.party}</td>
                         <td className="py-3 px-4">{getBadgeForType(row.transactionType)}</td>
                         <td className="py-3 px-4 text-right font-semibold text-blue-700 whitespace-nowrap">
@@ -1887,7 +1908,6 @@ export const Finance: React.FC<FinanceProps> = ({
             <thead>
               <tr className="bg-slate-100 border-y border-slate-300 text-[11px] font-bold text-slate-800 uppercase">
                 <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3">Description</th>
                 <th className="py-2.5 px-3">Party</th>
                 <th className="py-2.5 px-3">Transaction Type</th>
                 <th className="py-2.5 px-3 text-right">Debit (₹)</th>
@@ -1898,7 +1918,7 @@ export const Finance: React.FC<FinanceProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredDayLedgerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
                     No ledger transactions recorded in this period.
                   </td>
                 </tr>
@@ -1906,7 +1926,6 @@ export const Finance: React.FC<FinanceProps> = ({
                 filteredDayLedgerRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100">
                     <td className="py-2 px-3 whitespace-nowrap text-slate-700">{row.date ? formatDate(row.date) : '—'}</td>
-                    <td className="py-2 px-3 font-medium text-slate-900">{row.description}</td>
                     <td className="py-2 px-3 text-slate-800">{row.party}</td>
                     <td className="py-2 px-3 font-semibold text-slate-700">{row.transactionType}</td>
                     <td className="py-2 px-3 text-right font-semibold text-slate-900">
@@ -1924,7 +1943,7 @@ export const Finance: React.FC<FinanceProps> = ({
             </tbody>
             <tfoot>
               <tr className="bg-slate-100 border-t-2 border-slate-900 font-bold text-slate-900">
-                <td colSpan={4} className="py-3 px-3 uppercase tracking-wider text-right">Total:</td>
+                <td colSpan={3} className="py-3 px-3 uppercase tracking-wider text-right">Total:</td>
                 <td className="py-3 px-3 text-right text-blue-900">{formatCurrency(dayLedgerTotalDebit)}</td>
                 <td className="py-3 px-3 text-right text-emerald-900">{formatCurrency(dayLedgerTotalCredit)}</td>
                 <td className="py-3 px-3 text-right text-slate-900">{formatCurrency(dayLedgerClosingBalance)}</td>
@@ -1961,6 +1980,23 @@ export const Finance: React.FC<FinanceProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Consolidated Invoice Modal */}
+      <CreateConsolidatedInvoiceModal
+        isOpen={showConsolidatedInvoiceModal}
+        onClose={() => setShowConsolidatedInvoiceModal(false)}
+        onInvoiceCreated={() => {
+          loadFinanceData();
+        }}
+      />
+
+      {/* Record Payment Modal */}
+      <RecordPaymentModal
+        isOpen={showRecordPaymentModal}
+        onClose={() => setShowRecordPaymentModal(false)}
+        defaultOrderId={recordPaymentDefaultOrderId}
+        onPaymentRecorded={handlePaymentRecorded}
+      />
     </div>
   );
 };
