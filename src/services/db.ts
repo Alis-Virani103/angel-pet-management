@@ -1548,7 +1548,7 @@ export async function addRawMaterial(data: Omit<RawMaterial, 'id' | 'status' | '
   setLocalItem(STORAGE_KEYS.RAW_MATERIALS, [newMaterial, ...list]);
 
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'rawMaterials', id), newMaterial), 'Adding raw material');
+    await persistCloudWrite(setDoc(doc(getDb(), 'rawMaterials', id), sanitizeForFirestore(newMaterial)), 'Adding raw material');
   }
 
   return newMaterial;
@@ -1764,7 +1764,7 @@ export async function addPurchase(
   setLocalItem(STORAGE_KEYS.PURCHASES, [newPurchase, ...list]);
 
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'purchases', newPurchase.id), newPurchase), 'Adding purchase');
+    await persistCloudWrite(setDoc(doc(getDb(), 'purchases', newPurchase.id), sanitizeForFirestore(newPurchase)), 'Adding purchase');
   }
 
   // Idempotent stock addition: if status is 'received' or 'completed', trigger stock increment once
@@ -1807,7 +1807,7 @@ export async function updatePurchase(id: string, updates: Partial<PurchaseOrder>
   setLocalItem(STORAGE_KEYS.PURCHASES, list.map((purchase) => purchase.id === id ? updated : purchase));
 
   if (shouldSyncToFirebase()) {
-    await persistCloudWrite(setDoc(doc(getDb(), 'purchases', id), updates, { merge: true }), 'Updating purchase');
+    await persistCloudWrite(setDoc(doc(getDb(), 'purchases', id), sanitizeForFirestore(updates), { merge: true }), 'Updating purchase');
   }
   return updated;
 }

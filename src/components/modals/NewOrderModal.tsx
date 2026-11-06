@@ -26,7 +26,7 @@ interface DraftOrderItem {
   loosePieces: number | string;
   isCombo: boolean;
   selectedInnerId?: string; // id of selected inner product or ''
-  selectedCapId?: string; // id of selected cap product or ''
+  selectedCapId?: string; // id of selected cap product or '' 
   manualRate?: number | string; // For Category D: manually entered product rate
 }
 
@@ -329,8 +329,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         innerProduct && capProduct
           ? 'bottle_inner_cap'
           : capProduct
-          ? 'bottle_cap'
-          : 'bottle_only';
+            ? 'bottle_cap'
+            : 'bottle_only';
 
       const itemWeightGrams = calculateItemWeightGrams({
         product,
@@ -857,11 +857,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div
               onClick={() => setOrderType('REGULAR')}
-              className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                orderType === 'REGULAR'
+              className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${orderType === 'REGULAR'
                   ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/20'
                   : 'border-slate-200 bg-white hover:bg-slate-100/60'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-bold text-xs text-slate-900">{t('Regular Order')}</span>
@@ -874,11 +873,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
             <div
               onClick={() => setOrderType('AS')}
-              className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                orderType === 'AS'
+              className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${orderType === 'AS'
                   ? 'border-purple-600 bg-purple-50/70 ring-2 ring-purple-500/20'
                   : 'border-slate-200 bg-white hover:bg-slate-100/60'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
@@ -1023,8 +1021,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               {paymentType === 'delivery_challan'
                 ? `${t('Rate (₹)')} (${t('Optional')})`
                 : priceCategory === 'D'
-                ? `${t('Rate (₹)')} (${t('Manual')})`
-                : t('Rate (₹)')}
+                  ? `${t('Rate (₹)')} (${t('Manual')})`
+                  : t('Rate (₹)')}
             </div>
             <div className="text-right">{t('Subtotal (₹)')}</div>
             <div className="text-center">{t('Action')}</div>
@@ -1148,13 +1146,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="font-semibold text-slate-900">{candidate.name}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                    candidate.type === 'bottle'
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${candidate.type === 'bottle'
                                       ? 'bg-blue-100 text-blue-700'
                                       : candidate.type === 'inner'
-                                      ? 'bg-purple-100 text-purple-700'
-                                      : 'bg-amber-100 text-amber-700'
-                                  }`}>
+                                        ? 'bg-purple-100 text-purple-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                    }`}>
                                     {candidate.type === 'bottle' ? 'Bottle' : candidate.type === 'inner' ? 'Inner' : 'Cap'}
                                   </span>
                                 </div>
@@ -1184,11 +1181,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleModeChange(item.id, false)}
-                              className={`flex-1 py-1 px-1.5 rounded-md text-center transition-all ${
-                                !item.sellByPacket
+                              className={`flex-1 py-1 px-1.5 rounded-md text-center transition-all ${!item.sellByPacket
                                   ? 'bg-white text-slate-900 shadow-xs font-bold'
                                   : 'text-slate-500 hover:text-slate-800 font-medium'
-                              }`}
+                                }`}
                               title={t('Enter quantity in pieces')}
                             >
                               {t('Pieces')}
@@ -1196,11 +1192,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleModeChange(item.id, true)}
-                              className={`flex-1 py-1 px-1.5 rounded-md text-center transition-all ${
-                                item.sellByPacket
+                              className={`flex-1 py-1 px-1.5 rounded-md text-center transition-all ${item.sellByPacket
                                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                                   : 'text-slate-500 hover:text-slate-800 font-medium'
-                              }`}
+                                }`}
                               title={`${t('Enter packet count')} (${unitsPerPacket.toLocaleString('en-IN')} ${t('Units per Packet')})`}
                             >
                               {t('Packet')}
@@ -1389,11 +1384,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                                 handleRowEnter(index);
                               }
                             }}
-                            className={`w-full h-10 pl-7 pr-3 bg-white text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 ${
-                              hasValidPrice
+                            className={`w-full h-10 pl-7 pr-3 bg-white text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 ${hasValidPrice
                                 ? 'text-slate-800 border-indigo-300 focus:ring-indigo-500/20'
                                 : 'text-slate-800 border-amber-300 focus:ring-amber-500/20'
-                            }`}
+                              }`}
                           />
                         </div>
                       ) : (
@@ -1405,22 +1399,21 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               handleRowEnter(index);
                             }
                           }}
-                          className={`h-10 flex items-center justify-between px-3 text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                            !product
+                          className={`h-10 flex items-center justify-between px-3 text-xs font-bold rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${!product
                               ? 'bg-slate-100 text-slate-400 border-slate-200'
                               : paymentType === 'delivery_challan' && !hasValidPrice
-                              ? 'bg-slate-100/60 text-slate-400 border-slate-200'
-                              : hasValidPrice
-                              ? 'bg-slate-100 text-slate-800 border-slate-200/80'
-                              : 'bg-rose-50 text-rose-600 border-rose-200'
-                          }`}
+                                ? 'bg-slate-100/60 text-slate-400 border-slate-200'
+                                : hasValidPrice
+                                  ? 'bg-slate-100 text-slate-800 border-slate-200/80'
+                                  : 'bg-rose-50 text-rose-600 border-rose-200'
+                            }`}
                         >
                           <span>
                             {hasValidPrice
                               ? `₹${unitPrice.toFixed(2)}`
                               : paymentType === 'delivery_challan'
-                              ? (product ? t('— (Optional)') : '-')
-                              : (product ? t('No Price') : '-')}
+                                ? (product ? t('— (Optional)') : '-')
+                                : (product ? t('No Price') : '-')}
                           </span>
                           {hasComboConfigured && hasValidPrice && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold uppercase tracking-tight">
@@ -1429,18 +1422,17 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           )}
                         </div>
                       )}
-                      <div className={`text-[10px] font-semibold mt-1 truncate ${
-                        isManualCategoryD
+                      <div className={`text-[10px] font-semibold mt-1 truncate ${isManualCategoryD
                           ? (hasValidPrice ? 'text-indigo-600' : 'text-amber-600')
                           : (hasValidPrice ? 'text-blue-600' : paymentType === 'delivery_challan' ? 'text-slate-500' : 'text-rose-600')
-                      }`}>
+                        }`}>
                         {isManualCategoryD
                           ? (hasValidPrice ? t('Custom Rate (Category D)') : t('Enter rate manually'))
                           : hasValidPrice
-                          ? (isBottle && innerProduct && capProduct && configuredComboPrice
+                            ? (isBottle && innerProduct && capProduct && configuredComboPrice
                               ? `Configured Combo (Cat ${priceCategory})`
                               : `Auto: Category ${priceCategory}`)
-                          : (product ? (paymentType === 'delivery_challan' ? t('Rate optional for challan') : `Missing Cat ${priceCategory} price`) : '')}
+                            : (product ? (paymentType === 'delivery_challan' ? t('Rate optional for challan') : `Missing Cat ${priceCategory} price`) : '')}
                       </div>
                       {product && (
                         <div
@@ -1449,13 +1441,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                               updateItem(item.id, { manualRate: String(prevRates[0]) });
                             }
                           }}
-                          className={`text-[10px] font-semibold mt-0.5 truncate ${
-                            prevRates.length > 0
+                          className={`text-[10px] font-semibold mt-0.5 truncate ${prevRates.length > 0
                               ? isManualCategoryD
                                 ? 'text-amber-600 cursor-pointer hover:underline'
                                 : 'text-amber-600'
                               : 'text-slate-400'
-                          }`}
+                            }`}
                           title={
                             prevRates.length > 0
                               ? `Previous ${prevRates.length} order rate${prevRates.length > 1 ? 's' : ''}: ${prevRates.map((r) => `₹${r.toFixed(2)}`).join(' • ')}${isManualCategoryD ? ' (click to use latest rate)' : ''}`
@@ -1731,11 +1722,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                 <div
                   key={tier.key}
                   onClick={() => setPriceCategory(tier.key)}
-                  className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                    selected
+                  className={`p-3 rounded-2xl border cursor-pointer transition-all ${selected
                       ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20'
                       : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/50'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-bold text-xs text-slate-900">{tier.label}</span>
@@ -1759,11 +1749,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  paymentType === 'cash_memo'
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${paymentType === 'cash_memo'
                     ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20'
                     : 'bg-white border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -1787,11 +1776,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               </label>
 
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  paymentType === 'debit_memo'
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${paymentType === 'debit_memo'
                     ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-500/20'
                     : 'bg-white border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -1815,11 +1803,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               </label>
 
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                  paymentType === 'delivery_challan'
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${paymentType === 'delivery_challan'
                     ? 'bg-indigo-50/70 border-indigo-500 ring-2 ring-indigo-500/20'
                     : 'bg-white border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <input
                   type="radio"

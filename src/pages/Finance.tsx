@@ -67,6 +67,7 @@ export type { DayLedgerRow, DayLedgerType };
 
 interface PartyLedgerRow {
   date: string;
+  createdAt?: string; // ISO timestamp for same-date tiebreaking
   party?: string;
   transaction: string;
   reference: string;
@@ -633,6 +634,7 @@ export const Finance: React.FC<FinanceProps> = ({
       const customer = customers.find((c) => c.id === order.customerId);
       partyLedgerBase.push({
         date: order.orderDate,
+        createdAt: order.createdAt,
         party: customer?.name || order.customerName || order.companyName,
         transaction: 'Sale',
         reference: order.orderNumber,
@@ -665,6 +667,7 @@ export const Finance: React.FC<FinanceProps> = ({
     customerOrders.forEach((order) => {
       partyLedgerBase.push({
         date: order.orderDate,
+        createdAt: order.createdAt,
         transaction: 'Sale',
         reference: order.orderNumber,
         debit: order.totalAmount,
@@ -690,6 +693,7 @@ export const Finance: React.FC<FinanceProps> = ({
       .forEach((purchase) => {
         partyLedgerBase.push({
           date: purchase.purchaseDate,
+          createdAt: purchase.createdAt,
           party: purchase.supplierName,
           transaction: 'Purchase',
           reference: purchase.purchaseNumber,
@@ -729,6 +733,7 @@ export const Finance: React.FC<FinanceProps> = ({
       .forEach((purchase) => {
         partyLedgerBase.push({
           date: purchase.purchaseDate,
+          createdAt: purchase.createdAt,
           transaction: 'Purchase',
           reference: purchase.purchaseNumber,
           debit: purchase.totalAmount,
@@ -761,17 +766,30 @@ export const Finance: React.FC<FinanceProps> = ({
       });
   }
 
+  // Sort ascending (oldest first) for correct cumulative running-balance computation
   const sortedPartyLedger = [...partyLedgerBase]
     .sort((first, second) => {
       if (!first.date && second.date) return 1;
       if (first.date && !second.date) return -1;
-      return first.date.localeCompare(second.date) || (first.transaction === 'Sale' || first.transaction === 'Purchase' ? -1 : 1);
+      const dateCmp = first.date.localeCompare(second.date);
+      if (dateCmp !== 0) return dateCmp;
+      // Same date: use createdAt timestamp ascending; newer creation will appear first after reversal
+      const firstTs = first.createdAt || '';
+      const secondTs = second.createdAt || '';
+      if (firstTs && secondTs) {
+        const tsCmp = firstTs.localeCompare(secondTs);
+        if (tsCmp !== 0) return tsCmp;
+      }
+      // Within same date & timestamp: Sales/Purchases before Payments
+      return (first.transaction === 'Sale' || first.transaction === 'Purchase' ? -1 : 1);
     });
   let runningBalance = 0;
-  const partyLedgerWithBalance: PartyLedgerRow[] = sortedPartyLedger.map((row) => {
+  const partyLedgerAscending: PartyLedgerRow[] = sortedPartyLedger.map((row) => {
     runningBalance += row.debit - row.credit;
     return { ...row, balance: runningBalance };
   });
+  // Reverse for display: newest transaction first; running balances remain mathematically correct
+  const partyLedgerWithBalance: PartyLedgerRow[] = [...partyLedgerAscending].reverse();
 
   const filteredPartyLedger = partyLedgerWithBalance
     .filter((row) => {
@@ -784,7 +802,8 @@ export const Finance: React.FC<FinanceProps> = ({
   const partySummary = {
     debit: partyLedgerRows.reduce((sum, row) => sum + row.debit, 0),
     credit: partyLedgerRows.reduce((sum, row) => sum + row.credit, 0),
-    balance: partyLedgerRows[partyLedgerRows.length - 1]?.balance || 0
+    // After reversal, rows[0] is the most recent (chronologically last) entry — its balance is the closing balance
+    balance: partyLedgerRows[0]?.balance || 0
   };
 
   return (

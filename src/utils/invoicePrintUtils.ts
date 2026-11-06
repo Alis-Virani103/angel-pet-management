@@ -114,7 +114,7 @@ export function consolidateDuplicateItems(items: OrderItem[]): OrderItem[] {
     // Merge quantities
     const totalQuantity = groupItems.reduce((sum, item) => sum + item.quantity, 0);
     const totalSubtotal = groupItems.reduce((sum, item) => sum + item.subtotal, 0);
-    
+
     // Use the first item as the base and merge
     const baseItem = groupItems[0];
     const mergedItem: OrderItem = {
@@ -123,14 +123,14 @@ export function consolidateDuplicateItems(items: OrderItem[]): OrderItem[] {
       subtotal: Number(totalSubtotal.toFixed(2)),
       // If items were sold by packet, consolidate packet counts and loose pieces
       soldByPacket: baseItem.soldByPacket,
-      packetCount: baseItem.soldByPacket 
+      packetCount: baseItem.soldByPacket
         ? groupItems.reduce((sum, item) => sum + (item.packetCount || 0), 0)
         : undefined,
       loosePieces: baseItem.soldByPacket
         ? groupItems.reduce((sum, item) => sum + (item.loosePieces || 0), 0)
         : undefined,
       // Recalculate weight if any
-      totalWeightGrams: baseItem.totalWeightGrams 
+      totalWeightGrams: baseItem.totalWeightGrams
         ? groupItems.reduce((sum, item) => sum + (item.totalWeightGrams || 0), 0)
         : undefined
     };
@@ -161,8 +161,8 @@ export function expandComboItems(
         typeof item.totalWeightGrams === 'number' && item.totalWeightGrams > 0
           ? item.totalWeightGrams
           : pieceGrams > 0
-          ? pieceGrams * item.quantity
-          : null;
+            ? pieceGrams * item.quantity
+            : null;
       expandedItems.push({
         item,
         quantity: item.quantity,
@@ -189,8 +189,8 @@ export function expandComboItems(
         typeof item.totalWeightGrams === 'number' && item.totalWeightGrams > 0
           ? item.totalWeightGrams
           : pieceGrams > 0
-          ? pieceGrams * item.quantity
-          : null;
+            ? pieceGrams * item.quantity
+            : null;
       expandedItems.push({
         item,
         quantity: item.quantity,
@@ -356,12 +356,7 @@ export function generateInvoiceHtml(
   const isChallan = order.paymentType === 'delivery_challan';
   const pendingBalance = Math.max(0, order.totalAmount - order.paidAmount);
 
-  const companyName = settings?.companyName || '';
-  const companyAddress = settings?.address || '';
-  const companyPhone = settings?.phone || '';
-  const companyEmail = settings?.email || '';
-  const companyGstin = isGst ? settings?.gstin || '' : '';
-
+  // Company details not rendered in print layout per company request
   const customerGstin = isGst ? customer?.gstin : undefined;
 
   // Consolidate duplicate items before expanding combos
@@ -371,15 +366,6 @@ export function generateInvoiceHtml(
   const hasAnyWeightInOrder =
     (typeof order.totalWeightGrams === 'number' && order.totalWeightGrams > 0) ||
     expandedItems.some((exp) => typeof exp.weightGrams === 'number' && exp.weightGrams > 0);
-
-  const totalPieces = order.totalQuantity || order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-  const totalOrderWeightGrams =
-    typeof order.totalWeightGrams === 'number' && order.totalWeightGrams > 0
-      ? order.totalWeightGrams
-      : hasAnyWeightInOrder
-      ? expandedItems.reduce((sum, exp) => sum + (exp.weightGrams || 0), 0)
-      : null;
-  const totalOrderWeightDisplay = order.totalWeightDisplay || formatWeight(totalOrderWeightGrams);
 
   const itemsRows = expandedItems
     .map((expandedItem, idx) => {
@@ -397,7 +383,7 @@ export function generateInvoiceHtml(
 
       let displayTitle = expandedItem.displayTitle || item.productName;
       let itemBadge = '';
-      
+
       if (isComponent) {
         const badgeColor = componentType === 'inner' ? '#be185d' : '#b45309';
         const badgeBg = componentType === 'inner' ? '#fdf2f8' : '#fffbeb';
@@ -421,8 +407,8 @@ export function generateInvoiceHtml(
         <tr style="border-bottom: 1px solid #f1f5f9;">
           <td style="padding: 6px 8px; color: #64748b; font-size: 9.5px; vertical-align: middle;">${idx + 1}</td>
           <td style="padding: 6px 8px; color: #0f172a; font-weight: 600; font-size: 10px; vertical-align: middle;">
-            <div>${displayTitle}${itemBadge}${autoLinkedBadge}</div>
-            ${packagingInfo}
+            <div>${displayTitle}${isChallan ? '' : `${itemBadge}${autoLinkedBadge}`}</div>
+            ${isChallan ? '' : packagingInfo}
             ${!isChallan ? `<div style="font-size: 8px; color: #94a3b8; font-weight: 400; margin-top: 1px;">Category ${item.priceCategory} Pricing</div>` : ''}
           </td>
           <td style="padding: 6px 8px; text-align: center; color: #475569; font-size: 9.5px; text-transform: capitalize; vertical-align: middle;">${item.productType}</td>
@@ -486,19 +472,28 @@ export function generateInvoiceHtml(
 </head>
 <body>
   <div class="page">
-    <!-- HEADER - REMOVED company branding and invoice metadata per user request -->
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
-      <tbody>
-        <tr>
-          <td style="vertical-align: top; width: 100%;">
-            <!-- Empty header space -->
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <!-- Simple clean divider -->
-    <div style="height: 1px; background: #e2e8f0; margin: 8px 0 10px 0;"></div>
+    <!-- HEADER - company branding and invoice metadata removed per company request -->
+    <div style="text-align: right; margin-bottom: 10px;">
+      <table style="font-size: 9.5px; border-collapse: collapse; margin-left: auto;">
+        <tbody>
+          <tr>
+            <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">
+              ${isGst ? 'Invoice No:' : 'Bill No:'}
+            </td>
+            <td style="font-weight: 700; color: #0f172a; padding: 1.5px 0; text-align: right;">
+              ${order.orderNumber}
+            </td>
+          </tr>
+          <tr>
+            <td style="color: #64748b; padding: 1.5px 6px 1.5px 0; text-align: right;">Date:</td>
+            <td style="font-weight: 600; color: #0f172a; padding: 1.5px 0; text-align: right;">
+              ${formatInvoiceDate(order.orderDate)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="height: 1px; background: #e2e8f0; margin: 0 0 10px 0;"></div>
 
     <!-- BILL-TO -->
     <div style="margin-bottom: 10px;">
@@ -544,10 +539,6 @@ export function generateInvoiceHtml(
         <tr>
           <!-- Left: notes, logistics & terms -->
           <td style="vertical-align: top; width: ${isChallan ? '100%' : '50%'}; padding-right: 16px;">
-            <div style="font-size: 9px; color: #475569; line-height: 1.5; margin-bottom: 6px;">
-              <div><strong>Total Quantity:</strong> ${formatNumberDisplay(totalPieces)} pcs</div>
-              <!-- Total Weight removed per user request -->
-            </div>
             ${order.notes ? `
               <div style="background: #f8fafc; border-left: 3px solid #cbd5e1; padding: 5px 8px; font-size: 8.5px; color: #475569; margin-bottom: 6px;">
                 <strong>Note:</strong> ${order.notes}

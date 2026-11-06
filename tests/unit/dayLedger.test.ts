@@ -133,10 +133,11 @@ describe('Day ledger remaining-sales balance', () => {
 
     expect(openingBalance).toBe(700);
     expect(rangedRows).toHaveLength(2);
-    expect(rangedRows[0].id).toBe('cust-pay-PAY-NEW');
-    expect(rangedRows[0].balance).toBe(600);
-    expect(rangedRows[1].id).toBe('expense-EXP-1');
-    expect(rangedRows[1].balance).toBe(550);
+    // After reversal rows are newest-first: EXP-1 (2026-10-03) then PAY-NEW (2026-10-02)
+    expect(rangedRows[0].id).toBe('expense-EXP-1');
+    expect(rangedRows[0].balance).toBe(550);
+    expect(rangedRows[1].id).toBe('cust-pay-PAY-NEW');
+    expect(rangedRows[1].balance).toBe(600);
     expect(summary.netBalance).toBe(550);
     expect(summary.closingBalance).toBe(550);
   });
@@ -161,8 +162,8 @@ describe('Day ledger remaining-sales balance', () => {
       'Supplier Payment'
     ]);
     expect(compareDayLedgerRows(
-      { id: 'sale-a', date: '2026-10-01', transactionType: 'Sale' },
-      { id: 'sale-b', date: '2026-10-01', transactionType: 'Sale' }
+      { id: 'sale-a', date: '2026-10-01', createdAt: '', transactionType: 'Sale' },
+      { id: 'sale-b', date: '2026-10-01', createdAt: '', transactionType: 'Sale' }
     )).toBeLessThan(0);
   });
 

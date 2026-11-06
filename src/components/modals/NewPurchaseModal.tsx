@@ -721,7 +721,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Failed to create purchase order:', err);
-      setError('Failed to record purchase entry. Please try again.');
+      setError('Purchase was not saved. Please check the supplier, material, quantity, and rate, then try again.');
     } finally {
       submissionInProgress.current = false;
       setLoading(false);

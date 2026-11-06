@@ -5,6 +5,7 @@ export type DayLedgerType = 'Sale' | 'Customer Payment' | 'Purchase' | 'Supplier
 export interface DayLedgerEntry {
   id: string;
   date: string;
+  createdAt?: string; // ISO timestamp for same-date tiebreaking (newest first)
   description: string;
   party: string;
   transactionType: DayLedgerType;
@@ -67,13 +68,22 @@ export function salesBalanceImpact(row: Pick<DayLedgerEntry, 'transactionType' |
 }
 
 export function compareDayLedgerRows(
-  first: Pick<DayLedgerEntry, 'id' | 'date' | 'transactionType'>,
-  second: Pick<DayLedgerEntry, 'id' | 'date' | 'transactionType'>
+  first: Pick<DayLedgerEntry, 'id' | 'date' | 'createdAt' | 'transactionType'>,
+  second: Pick<DayLedgerEntry, 'id' | 'date' | 'createdAt' | 'transactionType'>
 ): number {
+  // Entries with no date go to the end (oldest)
   if (!first.date && second.date) return 1;
   if (first.date && !second.date) return -1;
+  // Sort ascending by date (oldest first) for correct running-balance computation
   const dateCmp = (first.date || '').localeCompare(second.date || '');
   if (dateCmp !== 0) return dateCmp;
+  // Same date: use createdAt timestamp ascending (older creation first) so newest appears first after reversal
+  const firstTs = first.createdAt || '';
+  const secondTs = second.createdAt || '';
+  if (firstTs && secondTs) {
+    const tsCmp = firstTs.localeCompare(secondTs);
+    if (tsCmp !== 0) return tsCmp;
+  }
   const typeCmp = (TYPE_PRIORITY[first.transactionType] || 9) - (TYPE_PRIORITY[second.transactionType] || 9);
   if (typeCmp !== 0) return typeCmp;
   return (first.id || '').localeCompare(second.id || '');
@@ -110,6 +120,7 @@ export function buildDayLedgerEntries(sources: DayLedgerSources): DayLedgerEntry
       pushUnique({
         id: `sale-${order.id}`,
         date: order.orderDate || '',
+        createdAt: order.createdAt || '',
         description: desc,
         party,
         transactionType: 'Sale',
@@ -150,6 +161,7 @@ export function buildDayLedgerEntries(sources: DayLedgerSources): DayLedgerEntry
       pushUnique({
         id: `purchase-${purchase.id}`,
         date: purchase.purchaseDate || '',
+        createdAt: purchase.createdAt || '',
         description: desc,
         party,
         transactionType: 'Purchase',
@@ -246,7 +258,9 @@ export function summarizeDayLedger(rows: DayLedgerRow[], openingBalance = 0): Da
     .filter((row) => row.transactionType === 'Supplier Payment')
     .reduce((sum, row) => sum + row.credit, 0);
   const netBalance = openingBalance + totalSales - customerPaymentsReceived - businessExpenses - purchaseDebit;
-  const closingBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance;
+  // Rows are displayed newest-first; closing balance is the most recent (chronologically last) entry.
+  // After reversal, the chronologically-last entry sits at index 0.
+  const closingBalance = rows.length > 0 ? rows[0].balance : openingBalance;
 
   return {
     totalDebit: rows.reduce((sum, row) => sum + row.debit, 0),
@@ -269,10 +283,14 @@ export function buildDayLedger(
   bounds: DayLedgerDateBounds = {},
   explicitOpening = 0
 ): { rows: DayLedgerRow[]; summary: DayLedgerSummary; openingBalance: number; rangedRows: DayLedgerRow[] } {
+  // Sort ascending (oldest first) for correct cumulative running-balance computation
   const sorted = buildDayLedgerEntries(sources);
   const openingBalance = openingSalesBalanceBeforeRange(sorted, bounds, explicitOpening);
   const rangedEntries = sorted.filter((row) => inDateRange(row, bounds));
-  const rangedRows = applySalesRunningBalance(rangedEntries, openingBalance);
+  // Compute running balances in chronological (ascending) order
+  const ascendingRows = applySalesRunningBalance(rangedEntries, openingBalance);
+  // Reverse for display: newest transaction first; running balances remain mathematically correct
+  const rangedRows = [...ascendingRows].reverse();
   const summary = summarizeDayLedger(rangedRows, openingBalance);
   return { rows: rangedRows, summary, openingBalance, rangedRows };
 }

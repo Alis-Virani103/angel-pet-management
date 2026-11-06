@@ -212,9 +212,6 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
   const orderProgress = order ? getOrderDeliveryProgress(order, dispatches) : null;
 
   const companyName = settings?.companyName || '';
-  const companyAddress = settings?.address || '';
-  const companyPhone = settings?.phone || '';
-  const companyEmail = settings?.email || '';
   const companyGstin = isGst ? settings?.gstin || '' : '';
 
   const customerGstin = isGst ? customer?.gstin : undefined;
@@ -259,24 +256,7 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               <tr>
                 {/* LEFT: Company Branding */}
                 <td style={{ ...S.headerCell, width: '55%' }}>
-                  {isGst ? (
-                    <>
-                      {companyName && <div style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-                        {companyName}
-                      </div>}
-                      {(companyAddress || companyPhone || companyEmail) && (
-                        <div style={{ fontSize: '9px', color: '#475569', lineHeight: 1.5, marginTop: '4px' }}>
-                        {companyAddress && <div>{companyAddress}</div>}
-                        {(companyPhone || companyEmail) && <div>{companyPhone ? `Tel: ${companyPhone}` : ''}{companyPhone && companyEmail ? ' | ' : ''}{companyEmail ? `Email: ${companyEmail}` : ''}</div>}
-                        {companyGstin && (
-                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
-                            GSTIN: {companyGstin}
-                          </div>
-                        )}
-                        </div>
-                      )}
-                    </>
-                  ) : (
+                  {isAS && (
                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#475569' }}>
                       Delivery Estimate / Kachha Bill
                     </div>
@@ -285,15 +265,19 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
 
                 {/* RIGHT: Invoice Title & Meta Details */}
                 <td style={{ ...S.headerCell, width: '45%', textAlign: 'right' }}>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                    {titleText}
-                  </div>
-                  <div style={{ marginTop: '2px' }}>
-                    <span style={{ display: 'inline-block', background: '#f1f5f9', color: '#334155', fontSize: '8.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', letterSpacing: '0.5px' }}>
-                      {memoLabel}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: '6px', display: 'inline-block', textAlign: 'right' }}>
+                  {isAS && (
+                    <>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                        {titleText}
+                      </div>
+                      <div style={{ marginTop: '2px' }}>
+                        <span style={{ display: 'inline-block', background: '#f1f5f9', color: '#334155', fontSize: '8.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', letterSpacing: '0.5px' }}>
+                          {memoLabel}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <div style={{ marginTop: isAS ? '6px' : '0px', display: 'inline-block', textAlign: 'right' }}>
                     <table style={{ fontSize: '9.5px', borderCollapse: 'collapse', marginLeft: 'auto' }}>
                       <tbody>
                         <tr>
@@ -442,14 +426,6 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
               <tr>
                 {/* Left: notes, logistics & terms */}
                 <td style={{ verticalAlign: 'top', width: '50%', paddingRight: '16px' }}>
-                  <div style={{ fontSize: '9px', color: '#475569', lineHeight: 1.5, marginBottom: '6px' }}>
-                    <div><strong>Total Quantity:</strong> {totalPieces.toLocaleString('en-IN')} pcs</div>
-                    {hasAnyWeightInOrder && totalOrderWeightDisplay && (
-                      <div style={{ marginTop: '1px' }}>
-                        <strong>Total Weight:</strong> {totalOrderWeightDisplay}
-                      </div>
-                    )}
-                  </div>
                   {order.notes && (
                     <div style={{ background: '#f8fafc', borderLeft: '3px solid #cbd5e1', padding: '5px 8px', fontSize: '8.5px', color: '#475569', marginBottom: '6px' }}>
                       <strong>Note:</strong> {order.notes}
@@ -540,28 +516,11 @@ export const OrderDetails: React.FC<OrderDetailsProps> = ({
             </span>
           </div>
 
-          {/* ── SIGNATORY ──────────────────────────────────────── */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginTop: '12px', marginBottom: '8px' }}>
-            <tbody>
-              <tr>
-                <td style={{ width: '60%' }}></td>
-                <td style={{ width: '40%', textAlign: 'right' }}>
-                  <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '24px' }}>
-                    For {companyName}
-                  </div>
-                  <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '3px', color: '#64748b', fontSize: '8.5px' }}>
-                    Authorised Signatory
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          {/* ── SIGNATORY — removed per company request */}
 
           {/* ── FOOTER ─────────────────────────────────────────────────── */}
           <div style={S.footer}>
-            <strong>{companyName}</strong>
-            {isGst && companyGstin && <>&nbsp;|&nbsp; GSTIN: {companyGstin}</>}
-            &nbsp;|&nbsp; This is a computer-generated {isGst ? 'tax invoice' : 'bill'}.
+            This is a computer-generated {isGst ? 'tax invoice' : 'bill'}.
           </div>
 
         </div>
