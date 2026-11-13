@@ -17,11 +17,14 @@ import {
   Trash2,
   Clock,
   Building2,
-  Camera
+  Camera,
+  X
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { EditPurchaseItemsModal } from '../components/modals/EditPurchaseItemsModal';
+import { BulkEditPurchasesModal } from '../components/modals/BulkEditPurchasesModal';
 import { PurchasePhotosModal } from '../components/modals/PurchasePhotosModal';
+import { canBulkReceivePurchase } from '../utils/purchaseBulkUtils';
 import { useAuth } from '../auth/AuthContext';
 
 interface PurchasesProps {
@@ -45,6 +48,11 @@ export const Purchases: React.FC<PurchasesProps> = ({
   const [loading, setLoading] = useState(true);
   const [purchaseToEdit, setPurchaseToEdit] = useState<PurchaseOrder | null>(null);
   const [purchaseForPhotos, setPurchaseForPhotos] = useState<PurchaseOrder | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<Set<string>>(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState('');
 
   useEffect(() => {
     loadPurchasesData();
@@ -101,6 +109,85 @@ export const Purchases: React.FC<PurchasesProps> = ({
     return matchesSearch && matchesSupplier && matchesStatus && matchesPayment && matchesCategory;
   });
 
+  const visiblePurchaseIds = filteredPurchases.map((purchase) => purchase.id).join('|');
+  const selectedPurchases = filteredPurchases.filter((purchase) => selectedPurchaseIds.has(purchase.id));
+  const allFilteredSelected = filteredPurchases.length > 0 && filteredPurchases.every((purchase) => selectedPurchaseIds.has(purchase.id));
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    setSelectedPurchaseIds((current) => {
+      const visible = new Set(visiblePurchaseIds.split('|').filter(Boolean));
+      const next = new Set([...current].filter((id) => visible.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [visiblePurchaseIds, selectionMode]);
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedPurchaseIds(new Set());
+      setBulkMessage('');
+    } else {
+      setSelectionMode(true);
+      setSelectedPurchaseIds(new Set());
+      setBulkMessage('');
+    }
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedPurchaseIds(allFilteredSelected ? new Set() : new Set(filteredPurchases.map((purchase) => purchase.id)));
+  };
+
+  const togglePurchaseSelection = (id: string) => {
+    setSelectedPurchaseIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedPurchaseIds(new Set());
+    setBulkMessage('');
+  };
+
+  const handleBulkReceive = async () => {
+    const targets = selectedPurchases.filter(canBulkReceivePurchase);
+    if (targets.length === 0) {
+      setBulkMessage('No selected purchases are eligible to receive.');
+      return;
+    }
+
+    setBulkActionLoading(true);
+    setBulkMessage('');
+    const updatedPurchases: PurchaseOrder[] = [];
+    const failedNumbers: string[] = [];
+
+    for (const target of targets) {
+      try {
+        updatedPurchases.push(await updatePurchaseStatus(target.id, 'received'));
+      } catch (error) {
+        console.error(`Failed to receive purchase ${target.purchaseNumber}:`, error);
+        failedNumbers.push(target.purchaseNumber);
+      }
+    }
+
+    if (updatedPurchases.length > 0) {
+      setPurchases((current) =>
+        current.map((purchase) => updatedPurchases.find((updated) => updated.id === purchase.id) || purchase)
+      );
+    }
+    setSelectedPurchaseIds(new Set());
+    setBulkMessage(
+      failedNumbers.length > 0
+        ? `Received ${updatedPurchases.length} purchase(s). Failed: ${failedNumbers.join(', ')}`
+        : `Received ${updatedPurchases.length} purchase(s). Stock was added once per purchase.`
+    );
+    setBulkActionLoading(false);
+  };
+
   // Metrics
   const totalSpend = purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
   const totalQtyPurchased = purchases.reduce((sum, p) => sum + (p.totalQuantity || 0), 0);
@@ -119,6 +206,14 @@ export const Purchases: React.FC<PurchasesProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            onClick={toggleSelectionMode}
+            className={`px-3.5 py-2.5 font-semibold text-xs rounded-xl transition-colors flex items-center space-x-1.5 ${
+              selectionMode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>{selectionMode ? 'Done' : 'Select'}</span>
+          </button>
           {can('finance', 'create') && can('purchases', 'edit') && <button
             onClick={() => onOpenRecordPurchasePaymentModal()}
             className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-colors flex items-center space-x-1.5"
@@ -245,12 +340,57 @@ export const Purchases: React.FC<PurchasesProps> = ({
         </div>
       </div>
 
+      {selectionMode && (
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-blue-900">{selectedPurchases.length} selected</span>
+          <button
+            onClick={toggleSelectAll}
+            className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-100"
+          >
+            {allFilteredSelected ? 'Deselect All' : 'Select All'}
+          </button>
+          <button
+            onClick={() => setBulkEditOpen(true)}
+            disabled={selectedPurchases.length === 0 || !can('purchases', 'edit')}
+            className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50"
+          >
+            Edit Selected
+          </button>
+          <button
+            onClick={handleBulkReceive}
+            disabled={bulkActionLoading || selectedPurchases.length === 0 || !selectedPurchases.some(canBulkReceivePurchase) || (!can('purchases', 'edit') && !can('purchases', 'approve'))}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {bulkActionLoading ? 'Receiving...' : 'Receive Stock'}
+          </button>
+          {bulkMessage && <span className="text-[11px] font-medium text-slate-600">{bulkMessage}</span>}
+          <button
+            onClick={exitSelectionMode}
+            className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100"
+          >
+            <X className="w-3.5 h-3.5" />
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Purchases Data Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                {selectionMode && (
+                  <th className="py-3.5 px-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all filtered purchases"
+                      className="w-4 h-4 rounded border-slate-300"
+                    />
+                  </th>
+                )}
                 <th className="py-3.5 px-4">PO Number</th>
                 <th className="py-3.5 px-4">Date</th>
                 <th className="py-3.5 px-4">Supplier</th>
@@ -265,7 +405,7 @@ export const Purchases: React.FC<PurchasesProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={selectionMode ? 10 : 9} className="py-12 text-center text-slate-400 font-medium">
                     No purchase entries match your criteria.
                   </td>
                 </tr>
@@ -275,6 +415,17 @@ export const Purchases: React.FC<PurchasesProps> = ({
                   const mainItem = purchaseItems[0];
                   return (
                     <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
+                      {selectionMode && (
+                        <td className="py-3.5 px-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedPurchaseIds.has(po.id)}
+                            onChange={() => togglePurchaseSelection(po.id)}
+                            aria-label={`Select purchase ${po.purchaseNumber}`}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
+                        </td>
+                      )}
                       <td className="py-3.5 px-4 font-bold">
                         <Link to={`/purchases/${po.id}`} className="text-blue-600 hover:underline">
                           {po.purchaseNumber}
@@ -415,6 +566,22 @@ export const Purchases: React.FC<PurchasesProps> = ({
           purchase={purchaseForPhotos}
           onClose={() => setPurchaseForPhotos(null)}
           onPhotosUpdated={loadPurchasesData}
+        />
+      )}
+
+      {bulkEditOpen && selectedPurchases.length > 0 && (
+        <BulkEditPurchasesModal
+          isOpen
+          purchases={selectedPurchases}
+          onClose={() => setBulkEditOpen(false)}
+          onSaved={(updatedPurchases) => {
+            setPurchases((current) =>
+              current.map((purchase) => updatedPurchases.find((updated) => updated.id === purchase.id) || purchase)
+            );
+            setSelectedPurchaseIds(new Set());
+            setBulkEditOpen(false);
+            setBulkMessage(`Updated ${updatedPurchases.length} purchase(s).`);
+          }}
         />
       )}
     </div>
